@@ -31,20 +31,20 @@ To install ckanext-searchindexhook:
 
 - To configure the extension add the following configuration settings
 
-  # The endpoint of the search index webservice.
+  ; The endpoint of the search index webservice.
   ckan.searchindexhook.endpoint = http://localhost:9070/index-queue/
 
-  # The HTTP basic auth credentials for the search index webservice.
-  # Colons are disallowed for usage in the username or password, the default is kermit:kermit.
+  ; The HTTP basic auth credentials for the search index webservice.
+  ; Colons are disallowed for usage in the username or password, the default is kermit:kermit.
   ckan.searchindexhook.endpoint.credentials = username:password
 
-  # The base path of the target link to which the dataset name is appended
+  ; The base path of the target link to which the dataset name is appended
   ckan.searchindexhook.targetlink.url.base.path = /web/guest/suchen/-/details/
 
-  # Name of the search index
+  ; Name of the search index
   ckan.searchindexhook.index.name = govdata-ckan-de
 
-  # List of comma separated, indexable package / dataset types
+  ; List of comma separated, indexable package / dataset types
   ckan.searchindexhook.indexable.data.types = datensatz,dataset,dokument,app
 
 4. Restart CKAN. For example if you've deployed CKAN with Apache on Ubuntu::
