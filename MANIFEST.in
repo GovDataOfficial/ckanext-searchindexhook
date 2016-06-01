@@ -1,2 +1,12 @@
 include README.rst
-recursive-include ckanext/searchindexhook *.html *.json *.js *.less *.css
+recursive-include ckanext/searchindexhook *.py
+include *.gradle
+include *.properties
+include *.txt
+include .coveragerc
+include CHANGELOG
+include LICENSE
+include test.ini
+recursive-include bin *.bash
+recursive-include bin *.sh
+recursive-include ckanext *.gitignore

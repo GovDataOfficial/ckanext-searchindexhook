@@ -1,0 +1,5 @@
+ckan==2.3
+requests>=2.7,<3.0
+geojson>=1.3.1
+area
+shapely

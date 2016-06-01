@@ -1,0 +1,12 @@
+0.0.3
+
+- Wheel distribution enabled
+- Additional endpoint logging
+
+0.0.2
+
+- Endpoint index name configurable
+
+0.0.1
+
+- Initial release

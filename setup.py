@@ -2,11 +2,15 @@ from setuptools import setup, find_packages  # Always prefer setuptools over dis
 from codecs import open  # To use a consistent encoding
 from os import path
 
+VERSION = '1.5.0-SNAPSHOT'
 here = path.abspath(path.dirname(__file__))
 
 # Get the long description from the relevant file
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
+
+with open('base-requirements.txt') as f:
+    required = [line.strip() for line in f]
 
 setup(
     name='''ckanext-searchindexhook''',
@@ -14,7 +18,7 @@ setup(
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
     # http://packaging.python.org/en/latest/tutorial.html#version
-    version='0.0.1',
+    version=VERSION,
 
     description='''A CKAN extension to add and delete package data from a search index.''',
     long_description=long_description,
@@ -35,6 +39,8 @@ setup(
         # 3 - Alpha
         # 4 - Beta
         # 5 - Production/Stable
+        # 6 - Mature
+        # 7 - Inactive
         'Development Status :: 4 - Beta',
 
         # Pick your license as you wish (should match "license" above)
@@ -54,18 +60,14 @@ setup(
     # simple. Or you can use find_packages().
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
 
-    # List run-time dependencies here.  These will be installed by pip when your
-    # project is installed. For an analysis of "install_requires" vs pip's
-    # requirements files see:
-    # https://packaging.python.org/en/latest/technical.html#install-requires-vs-requirements-files
-    install_requires=[],
-
     # If there are data files included in your packages that need to be
     # installed, specify them here.  If using Python 2.6 or less, then these
     # have to be included in MANIFEST.in as well.
+    install_requires=required,
     include_package_data=True,
     package_data={
     },
+    namespace_packages=['ckanext'],
 
     # Although 'package_data' is the preferred approach, in some case you may
     # need to place data files outside of your packages.
@@ -78,6 +80,6 @@ setup(
     # pip to create the appropriate form of executable for the target platform.
     entry_points='''
         [ckan.plugins]
-        searchindexhook=ckanext.searchindexhook.plugin:SearchindexhookPlugin
+        search_index_hook=ckanext.searchindexhook.plugin:SearchIndexHookPlugin
     ''',
 )
