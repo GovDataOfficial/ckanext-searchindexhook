@@ -4,7 +4,7 @@
 source /usr/lib/ckan/env/bin/activate
 
 # Uninstall ckanext-searchindexhook
-pip uninstall -y ckanext-searchindexhook
+/usr/lib/ckan/env/bin/pip uninstall -y ckanext-searchindexhook
 
 # Remove ckan plugin "search_index_hook" from production.ini
 sed -i 's/ search_index_hook//' /etc/ckan/default/production.ini

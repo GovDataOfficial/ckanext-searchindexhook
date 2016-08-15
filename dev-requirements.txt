@@ -1,4 +1,4 @@
-ckan==2.3
+ckan==2.5.2
 coverage>=3.7,<4.0
 requests>=2.7,<3.0
 factory-boy==2.1
