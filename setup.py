@@ -1,8 +1,10 @@
-from setuptools import setup, find_packages  # Always prefer setuptools over distutils
 from codecs import open  # To use a consistent encoding
 from os import path
 
-VERSION = '2.4.1'
+from setuptools import setup, find_packages  # Always prefer setuptools over distutils
+
+
+VERSION = '3.0.0'
 here = path.abspath(path.dirname(__file__))
 
 # Get the long description from the relevant file
@@ -24,11 +26,11 @@ setup(
     long_description=long_description,
 
     # The project's main homepage.
-    url='https://github.com/raphaelstolt/ckanext-searchindexhook',
+    url='https://github.com/GovDataOfficial/ckanext-searchindexhook',
 
     # Author details
-    author='''Raphael Stolt''',
-    author_email='''raphael.stolt@seitenbau.com''',
+    author='SEITENBAU GmbH',
+    author_email='info@seitenbau.com',
 
     # Choose your license
     license='AGPL',

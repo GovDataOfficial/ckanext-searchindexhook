@@ -42,3 +42,7 @@ coverage.xml
 docs/_build/
 /.project
 /.pydevproject
+.settings/
+
+.idea
+bmi-govdata-ckanext-searchindexhook.iml

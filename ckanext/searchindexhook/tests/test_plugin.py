@@ -11,12 +11,11 @@ import json
 import geojson
 
 from nose.tools import assert_raises
-from mock import Mock, patch
+from mock import Mock, patch, ANY
 from requests.exceptions import HTTPError, ConnectionError
 
 
 class TestPlugin(unittest.TestCase, object):
-
     def setup(self):
         self.app = ckan.config.middleware.make_app(
             config['global_conf'],
@@ -103,10 +102,10 @@ class TestPlugin(unittest.TestCase, object):
         }
 
         resources_dict = {
-            "resources": {
+            "resources": [{
                 "cache_last_updated": None,
                 "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
-            },
+            }],
             "extras": extras_dict
         }
 
@@ -160,10 +159,10 @@ class TestPlugin(unittest.TestCase, object):
         }
 
         resources_dict = {
-            "resources": {
+            "resources": [{
                 "cache_last_updated": None,
                 "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
-            },
+            }],
             "special": special_dict
         }
 
@@ -344,26 +343,8 @@ class TestPlugin(unittest.TestCase, object):
 
         plugin.delete_from_index = pre_mock_def
 
-    @patch('ckanext.searchindexhook.plugin.requests.post')
-    def test_add_to_index_works_as_expected(self, mock_post):
-        plugin = self.get_plugin_instance()
-        plugin.indexable_data_types = 'indexable_dataset'
-        plugin.search_index_endpoint = 'http://www.ws.de/test/'
-        plugin.search_index_credentials = 'testuser:testpassword'
-        plugin.targetlink_url_base_path = '/test/path/'
-        plugin.search_index_name = 'test-index'
-
-        data_dict = {
-            "resources": {
-                "cache_last_updated": None,
-                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
-            },
-            "extras": [{
-                "key": "value"
-            }]
-        }
-
-        pkg_dict = {
+    def _build_pkg_dict(self, data_dict):
+        return {
             'id': 15, 'type': 'test-type',
             'private': False,
             'title': 'test-title', 'notes': 'test-notes',
@@ -385,29 +366,34 @@ class TestPlugin(unittest.TestCase, object):
             'data_dict': json.dumps(data_dict)
         }
 
-        plugin.add_to_index(pkg_dict)
-
-        metadata_dict = {
+    def _build_metadata_dict(self, pkg_dict, data_dict):
+        return {
             'state': pkg_dict['state'],
             'private': pkg_dict['private'],
             'name': pkg_dict['name'],
-            'isopen': pkg_dict['isopen'],
             'author': pkg_dict['author'],
             'author_email': pkg_dict['author_email'],
             'maintainer': pkg_dict['maintainer'],
             'maintainer_email': pkg_dict['maintainer_email'],
             'groups': pkg_dict['groups'],
             'notes': pkg_dict['notes'],
-            'license_id': pkg_dict['license_id'],
+
+            # license information from resources, in this case: "testResLicense" is an open license.
+            "has_open": False,
+            "has_closed": False,
+            "resources_licenses": [],
+
             'metadata_created': pkg_dict['metadata_created'],
             'metadata_modified': pkg_dict['metadata_modified'],
+            'dct_modified_fallback_ckan': pkg_dict['metadata_modified'],  # default value
             'type': pkg_dict['type'],
             'owner_org': pkg_dict['owner_org'],
             'resources': data_dict['resources'],
             'extras': data_dict['extras']
         }
 
-        expected_payload = [{
+    def _build_expected_payload(self, pkg_dict, metadata_dict, plugin):
+        return [{
             'indexName': plugin.search_index_name,
             'type': pkg_dict['type'],
             'version': None,
@@ -425,12 +411,132 @@ class TestPlugin(unittest.TestCase, object):
             }
         }]
 
+    def _build_plugin_add_index(self):
+        plugin = self.get_plugin_instance()
+        plugin.indexable_data_types = 'indexable_dataset'
+        plugin.search_index_endpoint = 'http://www.ws.de/test/'
+        plugin.search_index_credentials = 'testuser:testpassword'
+        plugin.targetlink_url_base_path = '/test/path/'
+        plugin.search_index_name = 'test-index'
+        return plugin
+
+    def _check_payload(self, expected_payload, request_mock):
+        '''
+        Checks if the mock was called with a data parameter which contains the same
+        values as expected_payload.
+        This ignores the order of the dict items.
+        '''
+        # unset output diff limit for dict comparisons.
+        self.maxDiff = None
+
+        args, kwargs = request_mock.call_args
+        json_raw = kwargs['data']
+        actual_payload = json.loads(json_raw)
+        # Payload is a list of dicts, and we use only one document
+        self.assertEquals(1, len(expected_payload),
+                          'Invalid expected_payload: Only one dict is supported')
+        self.assertEquals(1, len(actual_payload))
+        # dump and load again expected data to get unicode strings everywhere
+        expected_utf = json.loads(json.dumps(expected_payload))
+        # extract the dataset and unserialize all strings to allow a dict comparison
+        expected_data = expected_utf[0]
+        actual_data = actual_payload[0]
+
+        if expected_data['document']['metadata'] != None:
+            self.assertNotEquals(actual_data['document']['metadata'], None)
+            expected_meta = json.loads(expected_data['document']['metadata'])
+            actual_meta = json.loads(actual_data['document']['metadata'])
+            # although this is implicitly checked again below, check it here already as no further
+            # checks are needed if the metadata differs
+            self.assertDictEqual(expected_meta, actual_meta)
+
+            # write back unserialized metadata to allow comparing all other items
+            expected_data['document']['metadata'] = expected_meta
+            actual_data['document']['metadata'] = actual_meta
+
+        self.assertDictEqual(expected_data, actual_data)
+
+    @patch('ckanext.searchindexhook.plugin.requests.post')
+    def test_add_to_index_works_as_expected(self, mock_post):
+        plugin = self._build_plugin_add_index()
+
+        data_dict = {
+            "resources": [{
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "license": "testResLicense"
+            }],
+            "extras": [{
+                "key": "value"
+            }]
+        }
+
+        pkg_dict = self._build_pkg_dict(data_dict)
+
+        # Set openness map
+        plugin.license_openness_map = {"testResLicense": True}
+
+        plugin.add_to_index(pkg_dict)
+
+        metadata_dict = self._build_metadata_dict(pkg_dict, data_dict)
+        metadata_dict["resources_licenses"] = ["testResLicense"]
+        metadata_dict["has_open"] = True
+
+        expected_payload = self._build_expected_payload(pkg_dict, metadata_dict, plugin)
+
         mock_post.assert_called_once_with(
             plugin.get_search_index_endpoint(),
             auth=('testuser', 'testpassword'),
             headers={'Content-Type': 'application/json'},
-            data=json.dumps(expected_payload)
+            data=ANY
         )
+        self._check_payload(expected_payload, mock_post)
+
+    @patch('ckanext.searchindexhook.plugin.requests.post')
+    def test_add_to_index_extra_values(self, mock_post):
+        plugin = self._build_plugin_add_index()
+
+        data_dict = {
+            "resources": [{
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4"
+            }],
+            "extras": [{
+                "key": "temporal_start",
+                "value": "2017-08-24T11:19:57"
+            }, {
+                "key": "temporal_end",
+                "value": "2017-08-30T11:19:57"
+            }, {
+                "key": "issued",
+                "value": "2017-09-01T11:19:57"
+            }, {
+                "key": "modified",
+                "value": "2017-09-02T11:19:57"
+            }]
+        }
+
+        pkg_dict = self._build_pkg_dict(data_dict)
+
+        plugin.add_to_index(pkg_dict)
+
+        metadata_dict = self._build_metadata_dict(pkg_dict, data_dict)
+        metadata_dict['temporal_start'] = "2017-08-24 11:19:57"
+        metadata_dict['temporal_end'] = "2017-08-30 11:19:57"
+        metadata_dict['dct_issued'] = "2017-09-01 11:19:57"
+        metadata_dict['dct_modified'] = "2017-09-02 11:19:57"
+        # has to be the same, as dct_modified is set
+        metadata_dict['dct_modified_fallback_ckan'] = metadata_dict['dct_modified']
+
+        expected_payload = self._build_expected_payload(pkg_dict, metadata_dict, plugin)
+
+        mock_post.assert_called_once_with(
+            plugin.get_search_index_endpoint(),
+            auth=('testuser', 'testpassword'),
+            headers={'Content-Type': 'application/json'},
+            data=ANY
+        )
+        self._check_payload(expected_payload, mock_post)
 
     @patch('ckanext.searchindexhook.plugin.requests.delete')
     def test_delete_from_index_works_as_expected(self, mock_delete):
@@ -451,7 +557,7 @@ class TestPlugin(unittest.TestCase, object):
         plugin.search_index_name = 'test-index'
 
         plugin.resolve_data_dict = Mock(
-            return_value = mocked_pkg_dict
+            return_value=mocked_pkg_dict
         )
 
         plugin.delete_from_index(document_id)
@@ -476,8 +582,9 @@ class TestPlugin(unittest.TestCase, object):
             plugin.get_search_index_endpoint() + mocked_id_value,
             auth=('testuser', 'testpassword'),
             headers={'Content-Type': 'application/json'},
-            data=json.dumps(expected_payload)
+            data=ANY
         )
+        self._check_payload(expected_payload, mock_delete)
 
     def test_http_error_does_not_block_before_index(self):
         plugin = self.get_plugin_instance()
@@ -556,38 +663,38 @@ class TestPlugin(unittest.TestCase, object):
         )
 
         plugin.delete_from_index = pre_mock_def
-        
+
     def test_calculate_geojson_area(self):
         # Polygon with two holes
         spatial = geojson.Polygon([
-          [
-            [8.031005859375, 51.24128576954669],
-            [10.3656005859375, 51.436888577204996],
-            [10.4974365234375, 50.1135334310997],
-            [8.4320068359375, 50.0289165635219],
-            [8.031005859375, 51.24128576954669]
-          ],
-          [
-            [8.7451171875, 51.020666012558095],
-            [9.9700927734375, 51.02412130394265],
-            [9.9481201171875, 50.2682767372753],
-            [8.800048828125, 50.306884231551166],
-            [8.7451171875,51.020666012558095]
-          ],
-          [
-            [9.667968749999998, 51.26878915771344],
-            [10.0634765625, 51.327179239685634],
-            [10.1348876953125, 51.037939894299356],
-            [9.755859375, 51.089722918116344],
-            [9.667968749999998, 51.26878915771344]
-          ]
+            [
+                [8.031005859375, 51.24128576954669],
+                [10.3656005859375, 51.436888577204996],
+                [10.4974365234375, 50.1135334310997],
+                [8.4320068359375, 50.0289165635219],
+                [8.031005859375, 51.24128576954669]
+            ],
+            [
+                [8.7451171875, 51.020666012558095],
+                [9.9700927734375, 51.02412130394265],
+                [9.9481201171875, 50.2682767372753],
+                [8.800048828125, 50.306884231551166],
+                [8.7451171875, 51.020666012558095]
+            ],
+            [
+                [9.667968749999998, 51.26878915771344],
+                [10.0634765625, 51.327179239685634],
+                [10.1348876953125, 51.037939894299356],
+                [9.755859375, 51.089722918116344],
+                [9.667968749999998, 51.26878915771344]
+            ]
         ])
-        
+
         plugin = self.get_plugin_instance()
         area = plugin.calculate_geojson_area(spatial)
-        
+
         actual_area = 14626176108.445526
-        self.assertTrue(area > actual_area -100 and area < actual_area + 100)
+        self.assertTrue(area > actual_area - 100 and area < actual_area + 100)
 
     def get_plugin_instance(self, plugin_name='search_index_hook'):
         '''
