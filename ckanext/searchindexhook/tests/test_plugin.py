@@ -503,10 +503,10 @@ class TestPlugin(unittest.TestCase, object):
             }],
             "extras": [{
                 "key": "temporal_start",
-                "value": "2017-08-24T11:19:57"
+                "value": "2017-08-24T11:19:57+02:00"
             }, {
                 "key": "temporal_end",
-                "value": "2017-08-30T11:19:57"
+                "value": "2017-08-30T11:19:57+0200"
             }, {
                 "key": "issued",
                 "value": "2017-09-01T11:19:57"
@@ -537,6 +537,34 @@ class TestPlugin(unittest.TestCase, object):
             data=ANY
         )
         self._check_payload(expected_payload, mock_post)
+
+    def test_normalize_date_valid_values(self):
+        plugin = self._build_plugin_add_index()
+
+        expected = '2017-08-24 11:19:57'
+
+        valid_values = ['2017-08-24T11:19:57+02:00', '2017-08-24T11:19:57+0200', '2017-08-24T11:19:57.133814']
+        for value in valid_values:
+            actual = plugin.normalize_date(value)
+            self.assertEqual(actual, expected)
+
+        # without time
+        actual = plugin.normalize_date('20170824')
+        self.assertEqual(actual, '2017-08-24 00:00:00')
+
+    def test_normalize_date_invalid_values(self):
+        plugin = self._build_plugin_add_index()
+
+        invalid_values = ['24082017', 'foo', '']
+        for value in invalid_values:
+            with self.assertRaises(ValueError):
+                actual = plugin.normalize_date(value)
+                self.assertEqual(actual, None)
+
+        # TypeError if required param is None
+        with self.assertRaises(TypeError):
+            actual = plugin.normalize_date()
+            self.assertEqual(actual, None)
 
     @patch('ckanext.searchindexhook.plugin.requests.delete')
     def test_delete_from_index_works_as_expected(self, mock_delete):

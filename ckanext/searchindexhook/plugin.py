@@ -13,7 +13,7 @@ import pylons.config as config
 import requests
 from requests.exceptions import HTTPError, ConnectionError
 from shapely.geometry import shape
-
+from dateutil.parser import parse
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,29 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             return license_openness_map
         except Exception:
             return {}
+
+    @staticmethod
+    def shorten_resource_formats(resources_dict):
+        """
+        Replaces URI values in resource formats, such that a search for e.g. 'CSV' matches
+        both literal values and the media type or MDR resource URIs.
+        """
+        prefixes = [
+            'http://www.iana.org/assignments/media-types/',
+            'https://www.iana.org/assignments/media-types/',
+            'http://publications.europa.eu/resource/authority/file-type/',
+            'https://publications.europa.eu/resource/authority/file-type/',
+            'http://publications.europa.eu/mdr/resource/authority/file-type/',
+            'https://publications.europa.eu/mdr/resource/authority/file-type/'
+        ]
+
+        for res in resources_dict:
+            res_format = res.get('format')
+            if res_format:
+                for prefix in prefixes:
+                    if res_format.startswith(prefix):
+                        res_format = res_format.replace(prefix, '')
+                res['format'] = res_format
 
     @classmethod
     def assert_endpoint_configuration(cls, value):
@@ -259,6 +282,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         # 'data_dict' comes as a string
         data_dict_from_json = json.loads(data_dict['data_dict'])
         resources_dict = data_dict_from_json['resources']
+        self.shorten_resource_formats(resources_dict)
         extras_dict = data_dict_from_json['extras']
 
         credentials = self.get_search_index_credentials()
@@ -420,7 +444,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                                 shared_coordinates_counter += 1
                             if shared_coordinates_counter > 1:
                                 # skip spatial coordinates
-                                raise
+                                raise ValueError('More than one shared coordinate!')
 
                 # extract string to JSON
                 metadata_dict['boundingbox'] = json.loads(
@@ -445,7 +469,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                     "lon": spatial_center_x
                 }
             else:
-                raise
+                raise ValueError(spatial_validation['message'])
         except Exception as ex:
             info_message = "invalid GeoJSON in extras->spatial "
             info_message += "at dataset: " + data_dict['name']
@@ -490,7 +514,9 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             except ValueError:
                 pass
 
-        raise ValueError('Could find no suitable format.')
+        # Use dateutil as fallback, e.g. for time offset with colon: +02:00
+        parseddate = parse(datestr)
+        return parseddate.strftime(normalizedformat)
 
     @classmethod
     def transform_date_notation(cls, notation):
