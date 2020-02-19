@@ -2,6 +2,7 @@
 '''
 Tests for the ckanext.searchindexhook extension.
 '''
+import datetime
 import pylons.config as config
 import webtest
 import unittest
@@ -13,6 +14,7 @@ import geojson
 from nose.tools import assert_raises
 from mock import Mock, patch, ANY
 from requests.exceptions import HTTPError, ConnectionError
+from ckanext.searchindexhook.plugin import NORMALIZED_DATE_FORMAT
 
 
 class TestPlugin(unittest.TestCase, object):
@@ -538,6 +540,72 @@ class TestPlugin(unittest.TestCase, object):
         )
         self._check_payload(expected_payload, mock_post)
 
+    @patch('ckanext.searchindexhook.plugin.requests.post')
+    def test_add_to_index_extra_values_modified_date_in_future(self, mock_post):
+        plugin = self._build_plugin_add_index()
+
+        date_in_future = datetime.datetime.max.strftime("%Y-%m-%dT%H:%M:%S%z")
+        data_dict = {
+            "resources": [{
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4"
+            }],
+            "extras": [{
+                "key": "modified",
+                "value": date_in_future
+            }]
+        }
+
+        pkg_dict = self._build_pkg_dict(data_dict)
+
+        plugin.add_to_index(pkg_dict)
+
+        metadata_dict = self._build_metadata_dict(pkg_dict, data_dict)
+        metadata_dict['dct_modified'] = datetime.datetime.max.strftime(NORMALIZED_DATE_FORMAT)
+
+        expected_payload = self._build_expected_payload(pkg_dict, metadata_dict, plugin)
+
+        mock_post.assert_called_once_with(
+            plugin.get_search_index_endpoint(),
+            auth=('testuser', 'testpassword'),
+            headers={'Content-Type': 'application/json'},
+            data=ANY
+        )
+        self._check_payload(expected_payload, mock_post)
+
+    @patch('ckanext.searchindexhook.plugin.requests.post')
+    def test_add_to_index_extra_values_invalid_date(self, mock_post):
+        plugin = self._build_plugin_add_index()
+
+        data_dict = {
+            "resources": [{
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4"
+            }],
+            "extras": [{
+                "key": "temporal_start",
+                "value": "2016/17"
+            }]
+        }
+
+        pkg_dict = self._build_pkg_dict(data_dict)
+
+        # execute
+        plugin.add_to_index(pkg_dict)
+
+        # assert
+        metadata_dict = self._build_metadata_dict(pkg_dict, data_dict)
+
+        expected_payload = self._build_expected_payload(pkg_dict, metadata_dict, plugin)
+
+        mock_post.assert_called_once_with(
+            plugin.get_search_index_endpoint(),
+            auth=('testuser', 'testpassword'),
+            headers={'Content-Type': 'application/json'},
+            data=ANY
+        )
+        self._check_payload(expected_payload, mock_post)
+
     def test_normalize_date_valid_values(self):
         plugin = self._build_plugin_add_index()
 
@@ -673,6 +741,29 @@ class TestPlugin(unittest.TestCase, object):
 
         plugin.delete_from_index = pre_mock_def
 
+    def test_shorten_resource_formats_empty(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict = [
+            {}, {"format": ""}, {"format": "CSV"},
+            {"format": "http://publications.europa.eu/resource/authority/file-type/CSV"},
+            {"format": "https://publications.europa.eu/resource/authority/file-type/CSV"},
+            {"format": "http://publications.europa.eu/mdr/resource/authority/file-type/CSV"},
+            {"format": "https://publications.europa.eu/resource/authority/file-type/CSV"},
+            {"format": "http://www.iana.org/assignments/media-types/text/csv"},
+            {"format": "https://www.iana.org/assignments/media-types/text/csv"}
+        ]
+        expected_values = [
+            None, "", "CSV", "CSV", "CSV", "CSV", "CSV", "text/csv", "text/csv"
+        ]
+
+        # execute
+        plugin.shorten_resource_formats(resources_dict)
+
+        # assert
+        for num, resource_dict in enumerate(resources_dict):
+            self.assertEquals(expected_values[num], resource_dict.get('format', None))
+
     def test_connection_error_does_not_block_after_delete(self):
         plugin = self.get_plugin_instance()
 
@@ -723,6 +814,132 @@ class TestPlugin(unittest.TestCase, object):
 
         actual_area = 14626176108.445526
         self.assertTrue(area > actual_area - 100 and area < actual_area + 100)
+
+    def test_spatial_to_meta_geojson_type_point(self):
+        # prepare
+        extra = {}
+        extra['key'] = 'spatial'
+        extra['value'] = '{"type": "Point", "coordinates": [9.156908, 53.896117]}'
+        metadata_dict = {}
+        metadata_dict['name'] = 'test-dict-name'
+
+        # execute
+        plugin = self.get_plugin_instance()
+        plugin.spatial_to_meta(extra, metadata_dict)
+
+        # validate
+        self.assertEqual(metadata_dict['boundingbox'], json.loads(extra['value']))
+        self.assertEqual(metadata_dict['spatial_area'], 0)
+        self.assertEqual(metadata_dict['spatial_center'], {'lat': 53.896117, 'lon': 9.156908})
+
+    def test_spatial_to_meta_geojson_type_polygon_fix(self):
+        # prepare
+        extra = {}
+        extra['key'] = 'spatial'
+        extra['value'] = '''{"type": "polygon", "coordinates":[
+          [
+            [
+              9.11590576171875,
+              47.62097541515849
+            ],
+            [
+              9.2340087890625,
+              47.62097541515849
+            ],
+            [
+              9.2340087890625,
+              47.70421683390384
+            ],
+            [
+              9.11590576171875,
+              47.70421683390384
+            ],
+            [
+              9.11590576171875,
+              47.62097541515849
+            ]
+          ]
+        ]}'''
+        metadata_dict = {}
+        metadata_dict['name'] = 'test-dict-name'
+
+        # execute
+        plugin = self.get_plugin_instance()
+        plugin.spatial_to_meta(extra, metadata_dict)
+
+        # validate
+        fixed_spatial_source = extra['value'].replace(
+                'polygon',
+                'Polygon'
+            )
+        self.assertEqual(metadata_dict['boundingbox'], json.loads(fixed_spatial_source))
+        self.assertEqual(metadata_dict['spatial_area'], 82049776.65255576)
+        self.assertEqual(metadata_dict['spatial_center'],
+                         {'lat': 47.66259612453116, 'lon': 9.174957275390625})
+
+    def test_remove_duplicate_coordinates(self):
+        # prepare
+        extra = {}
+        extra['key'] = 'spatial'
+        extra['value'] = '''{"type": "Polygon", "coordinates":[
+          [
+            [
+              9.11590576171875,
+              47.62097541515849
+            ],
+            [
+              9.2340087890625,
+              47.62097541515849
+            ],
+            [
+              9.2340087890625,
+              47.62097541515849
+            ],
+            [
+              9.2340087890625,
+              47.70421683390384
+            ],
+            [
+              9.11590576171875,
+              47.70421683390384
+            ],
+            [
+              9.11590576171875,
+              47.62097541515849
+            ]
+          ]
+        ]}'''
+        metadata_dict = {}
+        metadata_dict['name'] = 'test-dict-name'
+
+        # execute
+        plugin = self.get_plugin_instance()
+        plugin.spatial_to_meta(extra, metadata_dict)
+
+        # validate
+        expected_coordinates = [
+            [
+              9.11590576171875,
+              47.62097541515849
+            ],
+            [
+              9.2340087890625,
+              47.62097541515849
+            ],
+            [
+              9.2340087890625,
+              47.70421683390384
+            ],
+            [
+              9.11590576171875,
+              47.70421683390384
+            ],
+            [
+              9.11590576171875,
+              47.62097541515849
+            ]
+        ]
+        self.assertListEqual(metadata_dict['boundingbox']['coordinates'][0], expected_coordinates)
 
     def get_plugin_instance(self, plugin_name='search_index_hook'):
         '''

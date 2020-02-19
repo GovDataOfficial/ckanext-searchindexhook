@@ -15,7 +15,9 @@ from requests.exceptions import HTTPError, ConnectionError
 from shapely.geometry import shape
 from dateutil.parser import parse
 
-logger = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
+
+NORMALIZED_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
 class SearchIndexHookPlugin(plugins.SingletonPlugin):
@@ -226,10 +228,10 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         a deletion is performed. Only "active" datasets will be index,
         "deleted" datasets are only deleted, but not updated.
         """
-        logger.debug("Syncing before Solr indexing")
+        LOGGER.debug("Syncing before Solr indexing")
 
         if 'type' not in pkg_dict:
-            logger.error('No package / dataset type set')
+            LOGGER.error('No package / dataset type set')
 
             return pkg_dict
 
@@ -238,7 +240,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                 type=pkg_dict['type']
             )
 
-            logger.info(info_message)
+            LOGGER.info(info_message)
 
             return pkg_dict
 
@@ -249,12 +251,12 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             error_message = 'Request failed with: {message}'.format(
                 message=error.message
             )
-            logger.error(error_message)
+            LOGGER.error(error_message)
         except ConnectionError as error:
             error_message = 'Endpoint is not available: {message}'.format(
                 message=error.message
             )
-            logger.error(error_message)
+            LOGGER.error(error_message)
 
         return pkg_dict
 
@@ -315,7 +317,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             try:
                 # if there are geo data, extract them
                 if extra['key'] == 'spatial' and extra['value'] != '':
-                    self.spatial_to_meta(extra, data_dict, metadata_dict)
+                    self.spatial_to_meta(extra, metadata_dict)
                 # prepare time coverage for easier search
                 elif extra['key'] == 'temporal_start' and extra['value'] != '':
                     metadata_dict['temporal_start'] = self.normalize_date(
@@ -334,15 +336,18 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                     metadata_dict['dct_modified'] = self.normalize_date(
                         extra['value']
                     )
-                    # set metadata_modified field to the extras value if available
-                    # (like RDF output)
-                    metadata_dict['dct_modified_fallback_ckan'] = self.normalize_date(
-                        extra['value']
-                    )
-            except ValueError:
+                    # set metadata_modified field to the extras value if available and the date is not
+                    # in the future
+                    dct_modified_date_obj_utc = datetime.datetime.strptime(
+                        metadata_dict['dct_modified'], NORMALIZED_DATE_FORMAT
+                        ).utctimetuple()
+                    if dct_modified_date_obj_utc < datetime.datetime.now().utctimetuple():
+                        metadata_dict['dct_modified_fallback_ckan'] = metadata_dict['dct_modified']
+            except (ValueError, LookupError):
                 info_message = "invalid date format in extras->" + extra['key']
                 info_message += " at dataset: " + data_dict['name']
-                logger.info(info_message)
+                info_message += ", value: " + extra['value']
+                LOGGER.info(info_message)
 
         payload = [{
             'indexName': self.search_index_name,
@@ -365,7 +370,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         info_message = 'Endpoint to call against: {endpoint}'.format(
             endpoint=self.get_search_index_endpoint()
         )
-        logger.debug(info_message)
+        LOGGER.debug(info_message)
 
         request = requests.post(
             self.get_search_index_endpoint(),
@@ -378,12 +383,12 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             id=data_dict['id'],
             name=data_dict['name']
         )
-        logger.debug(info_message)
+        LOGGER.debug(info_message)
 
         info_message = "Service response status code: (code={code})".format(
             code=request.status_code
         )
-        logger.debug(info_message)
+        LOGGER.debug(info_message)
         request.raise_for_status()
 
     @staticmethod
@@ -412,7 +417,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
 
         return has_open, has_closed
 
-    def spatial_to_meta(self, extra, data_dict, metadata_dict):
+    def spatial_to_meta(self, extra, metadata_dict):
         """
         Helper to get GeoJSON from extras->spatial into a metadata_dict for the given
         extra item
@@ -431,9 +436,10 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             spatial_validation = geojson.is_valid(spatial)
 
             if spatial_validation['valid'] == 'yes':
-                # additional check: does the interior share more
-                # than 1 point with exterior? --> invalid
-                if len(spatial.coordinates) > 1:
+                # - additional check: does the interior share more
+                #   than 1 point with exterior? --> invalid
+                # - exclude GeoJSON type Point
+                if len(spatial.coordinates) > 1 and isinstance(spatial.coordinates[0], list):
                     # check all internal polygons
                     for internal_polygon in spatial.coordinates[1:]:
                         shared_coordinates_counter = 0
@@ -446,9 +452,11 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                                 # skip spatial coordinates
                                 raise ValueError('More than one shared coordinate!')
 
-                # extract string to JSON
+                # extract string to JSON and remove potential duplicate coordinates using shapely
+                # cf. https://stackoverflow.com/questions/49330030/remove-a-duplicate-point-from-polygon-in-shapely?rq=1
+                # dump and load to get unicode strings in dicts.
                 metadata_dict['boundingbox'] = json.loads(
-                    fixed_spatial_source
+                    geojson.dumps(shape(spatial).simplify(0))
                 )
 
                 # calculate area covered by the the shape
@@ -472,12 +480,13 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                 raise ValueError(spatial_validation['message'])
         except Exception as ex:
             info_message = "invalid GeoJSON in extras->spatial "
-            info_message += "at dataset: " + data_dict['name']
+            info_message += "at dataset: " + metadata_dict['name']
+            info_message += ", value: " + fixed_spatial_source
             info_message += ", Exception: "
             info_message += type(ex).__name__
             info_message += ", "
             info_message += str(ex.args)
-            logger.info(info_message)
+            LOGGER.info(info_message)
 
     def normalize_date(self, datestr):
         """
@@ -501,8 +510,6 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             "dd.MM.yyyy"
         ]
 
-        normalizedformat = "%Y-%m-%d %H:%M:%S"
-
         for dateformat in dateformats:
             try:
                 parseddate = datetime.datetime.strptime(
@@ -510,13 +517,13 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                     self.transform_date_notation(dateformat)
                 )
 
-                return parseddate.strftime(normalizedformat)
+                return parseddate.strftime(NORMALIZED_DATE_FORMAT)
             except ValueError:
                 pass
 
         # Use dateutil as fallback, e.g. for time offset with colon: +02:00
         parseddate = parse(datestr)
-        return parseddate.strftime(normalizedformat)
+        return parseddate.strftime(NORMALIZED_DATE_FORMAT)
 
     @classmethod
     def transform_date_notation(cls, notation):
@@ -564,7 +571,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             log_message = "Dataset for id {id} was not found".format(
                 id=document_id
             )
-            logger.error(log_message)
+            LOGGER.error(log_message)
 
             raise Exception(not_found)
 
@@ -601,7 +608,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         info_message = 'Endpoint to call against: {endpoint}'.format(
             endpoint=self.get_search_index_endpoint() + real_package_id
         )
-        logger.debug(info_message)
+        LOGGER.debug(info_message)
 
         request = requests.delete(
             self.get_search_index_endpoint() + real_package_id,
@@ -613,18 +620,18 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         info_message = "Deleting from index: (id={id}, name={name})".format(
             id=real_package_id, name=package_dict['name']
         )
-        logger.debug(info_message)
+        LOGGER.debug(info_message)
         info_message = "Service reponse status code: (code={code})".format(
             code=request.status_code
         )
-        logger.debug(info_message)
+        LOGGER.debug(info_message)
         request.raise_for_status()
 
     def after_delete(self, context, data_dict):
         """
         CKAN hook point for dataset deletion.
         """
-        logger.debug("Syncing after package deletion")
+        LOGGER.debug("Syncing after package deletion")
 
         try:
             self.delete_from_index(
@@ -635,9 +642,9 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             error_message = 'Request failed with: {message}'.format(
                 message=error.message
             )
-            logger.error(error_message)
+            LOGGER.error(error_message)
         except ConnectionError as error:
             error_message = 'Endpoint is not available: {message}'.format(
                 message=error.message
             )
-            logger.error(error_message)
+            LOGGER.error(error_message)
