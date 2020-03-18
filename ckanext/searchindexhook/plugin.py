@@ -55,6 +55,14 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
     # IPackageController
 
     def __init__(self, **kwargs):
+        # Workaround until the core translation function defaults to the Flask one
+        from paste.registry import Registry
+        from ckan.lib.cli import MockTranslator
+        registry = Registry()
+        registry.prepare()
+        from pylons import translator
+        registry.register(translator, MockTranslator())
+
         # Load license information once
         self.license_openness_map = self.load_license_openness()
 
@@ -73,7 +81,8 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                                                       license["is_osi_compliant"]
 
             return license_openness_map
-        except Exception:
+        except Exception as err:
+            LOGGER.warn('Could not load license list for openness calculation! Details: %s', err)
             return {}
 
     @staticmethod

@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.7.0 2019-12-19
+
+* Add workaround for compatibility with Pylons/Flask to the latest CKAN versions
+* Remove the restriction to a specific version of CKAN in dev requirements as well
+* Log when license list is missing
+
 ## v3.6.2 2019-11-28
 
 * Remove the restriction to a specific version of CKAN
