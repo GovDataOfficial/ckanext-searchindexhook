@@ -385,6 +385,10 @@ class TestPlugin(unittest.TestCase, object):
             "has_closed": False,
             "resources_licenses": [],
 
+            # Quality metrics: set to false as default
+            "has_access_url": False,
+            "has_formats": False,
+
             'metadata_created': pkg_dict['metadata_created'],
             'metadata_modified': pkg_dict['metadata_modified'],
             'dct_modified_fallback_ckan': pkg_dict['metadata_modified'],  # default value
@@ -466,7 +470,12 @@ class TestPlugin(unittest.TestCase, object):
             "resources": [{
                 "cache_last_updated": None,
                 "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
-                "license": "testResLicense"
+                "license": "testResLicense",
+                "access_url": "http://example.com/",
+                "format": "csv"
+            }, { # second resource without license or urls to check if has_... attributes are built correctly
+                "cache_last_updated": None,
+                "package_id": "g73d8b97-e6cb-46bf-bbf6-670155f9fbb4"
             }],
             "extras": [{
                 "key": "value"
@@ -482,7 +491,10 @@ class TestPlugin(unittest.TestCase, object):
 
         metadata_dict = self._build_metadata_dict(pkg_dict, data_dict)
         metadata_dict["resources_licenses"] = ["testResLicense"]
+        # One dataset is sufficient for these attributes, so check if they are true
         metadata_dict["has_open"] = True
+        metadata_dict["has_formats"] = True
+        metadata_dict["has_access_url"] = True
 
         expected_payload = self._build_expected_payload(pkg_dict, metadata_dict, plugin)
 
@@ -515,6 +527,27 @@ class TestPlugin(unittest.TestCase, object):
             }, {
                 "key": "modified",
                 "value": "2017-09-02T11:19:57"
+            }, {
+                "key": "contact_name",
+                "value": "Example"
+            }, {
+                "key": "contact_email",
+                "value": "contact@example.com"
+            }, {
+                "key": "maintainer_tel",
+                "value": "tel:+4912345"
+            }, {
+                "key": "publisher_name",
+                "value": "Publisher"
+            }, {
+                "key": "geocodingText",
+                "value": "[\"Hamburg\"]" # values are lists but stored as strings
+            }, {
+                "key": "politicalGeocodingLevelURI",
+                "value": "http://dcat-ap.de/def/politicalGeocoding/Level/state"
+            }, {
+                "key": "politicalGeocodingURI",
+                "value": "[\"http://dcat-ap.de/def/politicalGeocoding/stateKey/02\"]"
             }]
         }
 
@@ -529,6 +562,15 @@ class TestPlugin(unittest.TestCase, object):
         metadata_dict['dct_modified'] = "2017-09-02 11:19:57"
         # has to be the same, as dct_modified is set
         metadata_dict['dct_modified_fallback_ckan'] = metadata_dict['dct_modified']
+        # contact details should be added as well
+        metadata_dict['contact_name'] = "Example"
+        metadata_dict['contact_email'] = "contact@example.com"
+        metadata_dict['maintainer_tel'] = "tel:+4912345"
+        metadata_dict['publisher_name'] = "Publisher"
+        # geocoding
+        metadata_dict['geocodingText'] = "[\"Hamburg\"]"
+        metadata_dict['politicalGeocodingLevelURI'] = "http://dcat-ap.de/def/politicalGeocoding/Level/state"
+        metadata_dict['politicalGeocodingURI'] = "[\"http://dcat-ap.de/def/politicalGeocoding/stateKey/02\"]"
 
         expected_payload = self._build_expected_payload(pkg_dict, metadata_dict, plugin)
 
@@ -940,6 +982,157 @@ class TestPlugin(unittest.TestCase, object):
             ]
         ]
         self.assertListEqual(metadata_dict['boundingbox']['coordinates'][0], expected_coordinates)
+
+    def test_aggregate_quality_metrics_both_in_dict_as_expected(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "format": "csv",
+                "access_url": "http://domain.com"
+            }
+        ]
+
+        self.assertEquals(
+            (True, True),
+            plugin.aggregate_quality_metrics(resources_dict_list)
+        )
+
+    def test_aggregate_quality_metrics_both_not_in_dict(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4"
+            }
+        ]
+
+        self.assertEquals(
+            (False, False),
+            plugin.aggregate_quality_metrics(resources_dict_list)
+        )
+
+    def test_aggregate_quality_metrics_access_url_not_in_dict(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "format": "csv"
+            }
+        ]
+
+        self.assertEquals(
+            (False, True),
+            plugin.aggregate_quality_metrics(resources_dict_list)
+        )
+
+    def test_aggregate_quality_metrics_mimetype_in_dict_format_not(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "mimetype": "text/csv"
+            }
+        ]
+
+        self.assertEquals(
+            (False, True),
+            plugin.aggregate_quality_metrics(resources_dict_list)
+        )
+
+    def test_aggregate_quality_metrics_format_not_in_dict(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "access_url": "http://domain.com"
+            }
+        ]
+
+        self.assertEquals(
+            (True, False),
+            plugin.aggregate_quality_metrics(resources_dict_list)
+        )
+
+    def test_aggregate_quality_metrics_access_url_fallback_without_download_url(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "url": "http://domain.com"
+            }
+        ]
+
+        self.assertEquals(
+            (True, False),
+            plugin.aggregate_quality_metrics(resources_dict_list)
+        )
+
+    def test_aggregate_quality_metrics_access_url_fallback_download_url_different(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "url": "http://domain.com",
+                "download_url": "http://domain2.com"
+            }
+        ]
+
+        self.assertEquals(
+            (True, False),
+            plugin.aggregate_quality_metrics(resources_dict_list)
+        )
+
+    def test_aggregate_quality_metrics_access_url_fallback_download_url_same(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "url": "http://domain.com",
+                "download_url": "http://domain.com"
+            }
+        ]
+
+        self.assertEquals(
+            (False, False),
+            plugin.aggregate_quality_metrics(resources_dict_list)
+        )
+
+    def test_aggregate_quality_metrics_multiple_resources_only_in_one_resource(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "access_url": "http://domain.com"
+            },
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "format": "csv"
+            }
+        ]
+
+        self.assertEquals(
+            (True, True),
+            plugin.aggregate_quality_metrics(resources_dict_list)
+        )
 
     def get_plugin_instance(self, plugin_name='search_index_hook'):
         '''

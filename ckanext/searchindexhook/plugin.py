@@ -76,9 +76,9 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             license_list = plugins.toolkit.get_action('license_list')(context, {})
 
             license_openness_map = {}
-            for license in license_list:
-                license_openness_map[license["id"]] = license["is_okd_compliant"] or \
-                                                      license["is_osi_compliant"]
+            for license_dict in license_list:
+                license_openness_map[license_dict["id"]] = license_dict["is_okd_compliant"] or \
+                                                      license_dict["is_osi_compliant"]
 
             return license_openness_map
         except Exception as err:
@@ -279,8 +279,8 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         """
         Calculates the center point of the given Polygon and returns the coordinates
         """
-        shapelyPolygon = shape(spatial)
-        centroid = shapelyPolygon.centroid
+        shapely_polygon = shape(spatial)
+        centroid = shapely_polygon.centroid
         return centroid.x, centroid.y
 
     def add_to_index(self, data_dict):
@@ -298,6 +298,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
 
         credentials = self.get_search_index_credentials()
         has_open, has_closed = self.aggregate_openness(resources_dict)
+        has_access_url, has_formats = self.aggregate_quality_metrics(resources_dict)
 
         metadata_dict = {
             'state': data_dict['state'],
@@ -317,6 +318,8 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             'dct_modified_fallback_ckan': data_dict['metadata_modified'],
             'type': data_dict['type'],
             'owner_org': data_dict['owner_org'],
+            'has_access_url': has_access_url,
+            'has_formats': has_formats,
             'resources': resources_dict,
             'extras': extras_dict
         }
@@ -352,8 +355,16 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                         ).utctimetuple()
                     if dct_modified_date_obj_utc < datetime.datetime.now().utctimetuple():
                         metadata_dict['dct_modified_fallback_ckan'] = metadata_dict['dct_modified']
+                elif extra.get('value'):
+                    # some elements simply need to be copied, check if current extra matches one of these
+                    key = extra['key']
+                    # contact, publisher info and geocoding information for metadata quality dashboard
+                    if key in ['contact_name', 'contact_email', 'maintainer_tel', 'publisher_name',
+                               'geocodingText', 'politicalGeocodingLevelURI', 'politicalGeocodingURI']:
+                        metadata_dict[key] = extra['value']
+
             except (ValueError, LookupError):
-                info_message = "invalid date format in extras->" + extra['key']
+                info_message = "invalid data in extras->" + extra['key']
                 info_message += " at dataset: " + data_dict['name']
                 info_message += ", value: " + extra['value']
                 LOGGER.info(info_message)
@@ -409,6 +420,37 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                 licenses.add(resource["license"])
 
         return list(licenses)
+
+    @staticmethod
+    def aggregate_quality_metrics(resources_dict_list):
+        """
+        Returns a tuple containing two booleans for the metadata quality
+        dashboard. Considers availability of dcat:accessURL and dct:format or dcat:mediaType.
+        Output: (has_access_url, has_formats)
+        """
+        has_access_url = False
+        has_formats = False
+
+        for resource in resources_dict_list:
+            # for both attributes, it is sufficient if one resource fulfills the condition.
+            # access_url: Fallback behavior from DCAT profile (ckanext/dcat/profiles.py graph_from_dataset)
+            if "access_url" in resource:
+                has_access_url = True
+            elif "url" in resource:
+                # access URL is not set, consider url and download_url
+                download_url = resource.get("download_url")
+                if not download_url:
+                    # URL is used as fallback, so access URL available
+                    has_access_url = True
+                elif download_url != resource.get("url"):
+                    # Download URL is available and different from URL
+                    has_access_url = True
+
+            # format handling: Sufficient if one of the fields is available
+            if "mimetype" in resource or "format" in resource:
+                has_formats = True
+
+        return has_access_url, has_formats
 
     def aggregate_openness(self, resources_dict):
         """

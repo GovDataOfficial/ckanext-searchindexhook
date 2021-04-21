@@ -1,5 +1,10 @@
 # Changelog
 
+## v4.3.2 2021-01-28
+
+* Add new attributes for metadata quality metrics
+* Introduce .gitattributes and fix line endings
+
 ## v3.7.0 2019-12-19
 
 * Add workaround for compatibility with Pylons/Flask to the latest CKAN versions
