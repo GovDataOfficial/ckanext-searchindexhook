@@ -401,7 +401,7 @@ class TestPlugin(unittest.TestCase, object):
     def _build_expected_payload(self, pkg_dict, metadata_dict, plugin):
         return [{
             'indexName': plugin.search_index_name,
-            'type': pkg_dict['type'],
+            'type': None,
             'version': None,
             'displayName': None,
             'document': {
@@ -749,7 +749,7 @@ class TestPlugin(unittest.TestCase, object):
 
         expected_payload = [{
             'indexName': plugin.search_index_name,
-            'type': type_value,
+            'type': None,
             'version': None,
             'displayName': None,
             'document': {

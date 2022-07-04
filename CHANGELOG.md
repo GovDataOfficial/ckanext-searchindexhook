@@ -1,5 +1,10 @@
 # Changelog
 
+## unreleased yyyy-mm-dd
+
+* Update to Elasticsearch 7.x: Changes index-queue-service request body
+* Fixes dev-requirements.txt: Broken version 1.7.0 of lazy-object-proxy was banned
+
 ## v4.6.2 2021-11-23
 
 * Explicitly disallow incorrect version of python-dateutil

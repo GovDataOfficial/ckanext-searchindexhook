@@ -370,7 +370,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
 
         payload = [{
             'indexName': self.search_index_name,
-            'type': data_dict['type'],
+            'type': None,
             'version': None,
             'displayName': None,
             'document': {
@@ -641,7 +641,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
 
         payload = [{
             'indexName': self.search_index_name,
-            'type': package_dict['type'],
+            'type': None,
             'version': None,
             'displayName': None,
             'document': {
