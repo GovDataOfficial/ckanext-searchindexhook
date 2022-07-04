@@ -326,28 +326,21 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
 
         # prepare data from extras to be used in search
         for extra in extras_dict:
+            key = extra['key']
             try:
                 # if there are geo data, extract them
-                if extra['key'] == 'spatial' and extra['value'] != '':
+                if key == 'spatial' and extra['value'] != '':
                     self.spatial_to_meta(extra, metadata_dict)
                 # prepare time coverage for easier search
-                elif extra['key'] == 'temporal_start' and extra['value'] != '':
-                    metadata_dict['temporal_start'] = self.normalize_date(
-                        extra['value']
-                    )
-                elif extra['key'] == 'temporal_end' and extra['value'] != '':
-                    metadata_dict['temporal_end'] = self.normalize_date(
-                        extra['value']
-                    )
+                elif key == 'temporal_start' and extra['value'] != '':
+                    metadata_dict['temporal_start'] = self.normalize_date(extra['value'])
+                elif key == 'temporal_end' and extra['value'] != '':
+                    metadata_dict['temporal_end'] = self.normalize_date(extra['value'])
                 # dct:issued and dct:modified attributes
-                elif extra['key'] == 'issued' and extra['value'] != '':
-                    metadata_dict['dct_issued'] = self.normalize_date(
-                        extra['value']
-                    )
-                elif extra['key'] == 'modified' and extra['value'] != '':
-                    metadata_dict['dct_modified'] = self.normalize_date(
-                        extra['value']
-                    )
+                elif key == 'issued' and extra['value'] != '':
+                    metadata_dict['dct_issued'] = self.normalize_date(extra['value'])
+                elif key == 'modified' and extra['value'] != '':
+                    metadata_dict['dct_modified'] = self.normalize_date(extra['value'])
                     # set metadata_modified field to the extras value if available and the date is not
                     # in the future
                     dct_modified_date_obj_utc = datetime.datetime.strptime(
@@ -357,14 +350,20 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                         metadata_dict['dct_modified_fallback_ckan'] = metadata_dict['dct_modified']
                 elif extra.get('value'):
                     # some elements simply need to be copied, check if current extra matches one of these
-                    key = extra['key']
                     # contact, publisher info and geocoding information for metadata quality dashboard
                     if key in ['contact_name', 'contact_email', 'maintainer_tel', 'publisher_name',
-                               'geocodingText', 'politicalGeocodingLevelURI', 'politicalGeocodingURI']:
+                               'politicalGeocodingLevelURI']:
                         metadata_dict[key] = extra['value']
+                    # list values
+                    elif key in ['contributorID', 'geocodingText', 'politicalGeocodingURI']:
+                        # use json.loads to create a list with the values, if not possible use string
+                        try:
+                            metadata_dict[key] = json.loads(extra['value'])
+                        except ValueError:
+                            metadata_dict[key] = extra['value']
 
             except (ValueError, LookupError):
-                info_message = "invalid data in extras->" + extra['key']
+                info_message = "invalid data in extras->" + key
                 info_message += " at dataset: " + data_dict['name']
                 info_message += ", value: " + extra['value']
                 LOGGER.info(info_message)

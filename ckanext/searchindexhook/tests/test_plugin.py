@@ -540,6 +540,9 @@ class TestPlugin(unittest.TestCase, object):
                 "key": "publisher_name",
                 "value": "Publisher"
             }, {
+                "key": "contributorID",
+                "value": "[\"http://dcat-ap.de/def/contributors/transparenzportalHamburg\"]"
+            }, {
                 "key": "geocodingText",
                 "value": "[\"Hamburg\"]" # values are lists but stored as strings
             }, {
@@ -568,9 +571,53 @@ class TestPlugin(unittest.TestCase, object):
         metadata_dict['maintainer_tel'] = "tel:+4912345"
         metadata_dict['publisher_name'] = "Publisher"
         # geocoding
-        metadata_dict['geocodingText'] = "[\"Hamburg\"]"
+        metadata_dict['geocodingText'] = ["Hamburg"]
         metadata_dict['politicalGeocodingLevelURI'] = "http://dcat-ap.de/def/politicalGeocoding/Level/state"
-        metadata_dict['politicalGeocodingURI'] = "[\"http://dcat-ap.de/def/politicalGeocoding/stateKey/02\"]"
+        metadata_dict['politicalGeocodingURI'] = ["http://dcat-ap.de/def/politicalGeocoding/stateKey/02"]
+        # contributor should be a list
+        metadata_dict['contributorID'] = ["http://dcat-ap.de/def/contributors/transparenzportalHamburg"]
+
+        expected_payload = self._build_expected_payload(pkg_dict, metadata_dict, plugin)
+
+        mock_post.assert_called_once_with(
+            plugin.get_search_index_endpoint(),
+            auth=('testuser', 'testpassword'),
+            headers={'Content-Type': 'application/json'},
+            data=ANY
+        )
+        self._check_payload(expected_payload, mock_post)
+
+    @patch('ckanext.searchindexhook.plugin.requests.post')
+    def test_add_to_index_extra_values_strings(self, mock_post):
+        plugin = self._build_plugin_add_index()
+
+        data_dict = {
+            "resources": [{
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4"
+            }],
+            "extras": [{
+                "key": "contributorID",
+                "value": "http://dcat-ap.de/def/contributors/transparenzportalHamburg"
+            }, {
+                "key": "geocodingText",
+                "value": "Hamburg" # values are lists but stored as strings
+            }, {
+                "key": "politicalGeocodingURI",
+                "value": "http://dcat-ap.de/def/politicalGeocoding/stateKey/02"
+            }]
+        }
+
+        pkg_dict = self._build_pkg_dict(data_dict)
+
+        plugin.add_to_index(pkg_dict)
+
+        metadata_dict = self._build_metadata_dict(pkg_dict, data_dict)
+        # geocoding
+        metadata_dict['geocodingText'] = "Hamburg"
+        metadata_dict['politicalGeocodingURI'] = "http://dcat-ap.de/def/politicalGeocoding/stateKey/02"
+        # contributor should be a list
+        metadata_dict['contributorID'] = "http://dcat-ap.de/def/contributors/transparenzportalHamburg"
 
         expected_payload = self._build_expected_payload(pkg_dict, metadata_dict, plugin)
 

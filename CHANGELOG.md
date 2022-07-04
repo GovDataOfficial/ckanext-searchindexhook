@@ -1,5 +1,10 @@
 # Changelog
 
+## v4.6.0 2021-11-04
+
+* Adds 'contributorID' in extras as explicitly defined field
+* Saves as string defined explicitly defined fields of type list as list instead as string
+
 ## v4.3.2 2021-01-28
 
 * Add new attributes for metadata quality metrics
