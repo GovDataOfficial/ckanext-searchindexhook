@@ -1,5 +1,9 @@
 # Changelog
 
+## v4.6.2 2021-11-23
+
+* Explicitly disallow incorrect version of python-dateutil
+
 ## v4.6.0 2021-11-04
 
 * Adds 'contributorID' in extras as explicitly defined field

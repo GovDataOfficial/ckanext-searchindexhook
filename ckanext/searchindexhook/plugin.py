@@ -362,7 +362,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                         except ValueError:
                             metadata_dict[key] = extra['value']
 
-            except (ValueError, LookupError):
+            except (ValueError):
                 info_message = "invalid data in extras->" + key
                 info_message += " at dataset: " + data_dict['name']
                 info_message += ", value: " + extra['value']
