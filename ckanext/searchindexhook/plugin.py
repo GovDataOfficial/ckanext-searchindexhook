@@ -5,49 +5,49 @@ import datetime
 import json
 import logging
 
-from area import area
-import ckan.model as model
-import ckan.plugins as plugins
+from ckan import model
+import ckan.plugins as p
+from ckan.plugins import toolkit as tk
 import geojson
-import pylons.config as config
 import requests
-from requests.exceptions import HTTPError, ConnectionError
-from shapely.geometry import shape
+import six
+from area import area
 from dateutil.parser import parse
+from shapely.geometry import shape
 
 LOGGER = logging.getLogger(__name__)
 
 NORMALIZED_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 
-class SearchIndexHookPlugin(plugins.SingletonPlugin):
+class SearchIndexHookPlugin(p.SingletonPlugin):
     """
     Plugin for adding and deleting package data from the bmi-govdata
     search index.
     """
-    plugins.implements(plugins.IPackageController, inherit=True)
+    p.implements(p.IPackageController, inherit=True)
 
-    search_index_endpoint = config.get(
+    search_index_endpoint = tk.config.get(
         'ckan.searchindexhook.endpoint',
         False
     )
 
-    search_index_credentials = config.get(
+    search_index_credentials = tk.config.get(
         'ckan.searchindexhook.endpoint.credentials',
         False
     )
 
-    indexable_data_types = config.get(
+    indexable_data_types = tk.config.get(
         'ckan.searchindexhook.indexable.data.types',
         False
     )
 
-    targetlink_url_base_path = config.get(
+    targetlink_url_base_path = tk.config.get(
         'ckan.searchindexhook.targetlink.url.base.path',
         False
     )
 
-    search_index_name = config.get(
+    search_index_name = tk.config.get(
         'ckan.searchindexhook.index.name',
         False
     )
@@ -55,14 +55,6 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
     # IPackageController
 
     def __init__(self, **kwargs):
-        # Workaround until the core translation function defaults to the Flask one
-        from paste.registry import Registry
-        from ckan.lib.cli import MockTranslator
-        registry = Registry()
-        registry.prepare()
-        from pylons import translator
-        registry.register(translator, MockTranslator())
-
         # Load license information once
         self.license_openness_map = self.load_license_openness()
 
@@ -73,7 +65,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         """
         try:
             context = {'model': model, 'ignore_auth': True}
-            license_list = plugins.toolkit.get_action('license_list')(context, {})
+            license_list = tk.get_action('license_list')(context, {})
 
             license_openness_map = {}
             for license_dict in license_list:
@@ -82,7 +74,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
 
             return license_openness_map
         except Exception as err:
-            LOGGER.warn('Could not load license list for openness calculation! Details: %s', err)
+            LOGGER.warning('Could not load license list for openness calculation! Details: %s', err)
             return {}
 
     @staticmethod
@@ -114,7 +106,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         Asserts that search index endpoint is configured.
         """
         assert_message = 'Configured endpoint is not a value'
-        assert isinstance(value, basestring), assert_message
+        assert isinstance(value, six.string_types), assert_message
 
     @classmethod
     def assert_credentials_configuration(cls, value):
@@ -122,7 +114,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         Asserts that search index credentials are configured.
         """
         assert_message = 'Configured credentials are not a string'
-        assert isinstance(value, basestring), assert_message
+        assert isinstance(value, six.string_types), assert_message
         assert_message = ('Credentials not configured',
                           'in format username:password')
         assert len(value.split(':')) == 2, assert_message
@@ -133,7 +125,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         Asserts that the targetlink URL base path is configured.
         """
         assert_message = 'Configured URL base path is not a string'
-        assert isinstance(value, basestring), assert_message
+        assert isinstance(value, six.string_types), assert_message
 
     @classmethod
     def assert_search_index_name(cls, value):
@@ -141,7 +133,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         Asserts that the search index name is configured.
         """
         assert_message = 'Configured index name is not a string'
-        assert isinstance(value, basestring), assert_message
+        assert isinstance(value, six.string_types), assert_message
 
     @classmethod
     def assert_mandatory_dict_keys(cls, data_dict):
@@ -256,14 +248,14 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         try:
             self.delete_from_index(pkg_dict['id'])
             self.add_to_index(pkg_dict)
-        except HTTPError as error:
+        except requests.exceptions.HTTPError as error:
             error_message = 'Request failed with: {message}'.format(
-                message=error.message
+                message=six.text_type(error)
             )
             LOGGER.error(error_message)
-        except ConnectionError as error:
+        except requests.exceptions.ConnectionError as error:
             error_message = 'Endpoint is not available: {message}'.format(
-                message=error.message
+                message=six.text_type(error)
             )
             LOGGER.error(error_message)
 
@@ -482,20 +474,19 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                 'Polygon'
             )
 
-            spatial = geojson.loads(fixed_spatial_source)
-            spatial_validation = geojson.is_valid(spatial)
+            spatial_obj = geojson.loads(fixed_spatial_source)
 
-            if spatial_validation['valid'] == 'yes':
+            if spatial_obj.is_valid:
                 # - additional check: does the interior share more
                 #   than 1 point with exterior? --> invalid
                 # - exclude GeoJSON type Point
-                if len(spatial.coordinates) > 1 and isinstance(spatial.coordinates[0], list):
+                if len(spatial_obj.coordinates) > 1 and isinstance(spatial_obj.coordinates[0], list):
                     # check all internal polygons
-                    for internal_polygon in spatial.coordinates[1:]:
+                    for internal_polygon in spatial_obj.coordinates[1:]:
                         shared_coordinates_counter = 0
                         # iterate external coordinates,
                         # see if >1 matches internal polygon
-                        for coord_external in spatial.coordinates[0]:
+                        for coord_external in spatial_obj.coordinates[0]:
                             if coord_external in internal_polygon:
                                 shared_coordinates_counter += 1
                             if shared_coordinates_counter > 1:
@@ -506,11 +497,11 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                 # cf. https://stackoverflow.com/questions/49330030/remove-a-duplicate-point-from-polygon-in-shapely?rq=1
                 # dump and load to get unicode strings in dicts.
                 metadata_dict['boundingbox'] = json.loads(
-                    geojson.dumps(shape(spatial).simplify(0))
+                    geojson.dumps(shape(spatial_obj).simplify(0))
                 )
 
                 # calculate area covered by the the shape
-                spatial_area = self.calculate_geojson_area(spatial)
+                spatial_area = self.calculate_geojson_area(spatial_obj)
 
                 # area must at least be >0. We are using 1/X to rank the results
                 if spatial_area < 0:
@@ -520,14 +511,14 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
 
                 # calculate center of the shape
                 spatial_center_x, spatial_center_y = self.calculate_geojson_center(
-                    spatial
+                    spatial_obj
                 )
                 metadata_dict['spatial_center'] = {
                     "lat": spatial_center_y,
                     "lon": spatial_center_x
                 }
             else:
-                raise ValueError(spatial_validation['message'])
+                raise ValueError(spatial_obj.errors())
         except Exception as ex:
             info_message = "invalid GeoJSON in extras->spatial "
             info_message += "at dataset: " + metadata_dict['name']
@@ -535,7 +526,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
             info_message += ", Exception: "
             info_message += type(ex).__name__
             info_message += ", "
-            info_message += str(ex.args)
+            info_message += six.text_type(ex.args)
             LOGGER.info(info_message)
 
     def normalize_date(self, datestr):
@@ -605,7 +596,7 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
         """
         Resolves the data dict by id
         """
-        package_show = plugins.toolkit.get_action('package_show')
+        package_show = tk.get_action('package_show')
 
         if not context:
             context = {'model': model, 'ignore_auth': True}
@@ -688,13 +679,13 @@ class SearchIndexHookPlugin(plugins.SingletonPlugin):
                 data_dict['id'],
                 context
             )
-        except HTTPError as error:
+        except requests.exceptions.HTTPError as error:
             error_message = 'Request failed with: {message}'.format(
-                message=error.message
+                message=six.text_type(error)
             )
             LOGGER.error(error_message)
-        except ConnectionError as error:
+        except requests.exceptions.ConnectionError as error:
             error_message = 'Endpoint is not available: {message}'.format(
-                message=error.message
+                message=six.text_type(error)
             )
             LOGGER.error(error_message)

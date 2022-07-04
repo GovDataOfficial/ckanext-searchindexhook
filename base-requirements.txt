@@ -1,5 +1,6 @@
-requests>=2.7,<3.0
-geojson>=1.3.1,<2.0
+requests>=2.7
+geojson>=2.0,<2.5.0 # 2.5.0 adds default precision without the possiblity changing the default value
 area
 shapely
-python-dateutil>=2.7,!=2.8.1,<3.0
+python-dateutil>=2.7,!=2.8.1
+six==1.16.0

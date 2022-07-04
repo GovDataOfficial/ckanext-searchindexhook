@@ -3,98 +3,68 @@
 Tests for the ckanext.searchindexhook extension.
 '''
 import datetime
-import pylons.config as config
-import webtest
+
+import pytest
 import unittest
-import ckan.model as model
 import ckan.plugins
+from ckan.plugins import toolkit as tk
 import json
 import geojson
 
-from nose.tools import assert_raises
 from mock import Mock, patch, ANY
 from requests.exceptions import HTTPError, ConnectionError
 from ckanext.searchindexhook.plugin import NORMALIZED_DATE_FORMAT
 
 
 class TestPlugin(unittest.TestCase, object):
-    def setup(self):
-        self.app = ckan.config.middleware.make_app(
-            config['global_conf'],
-            **config
-        )
-        self.app = webtest.TestApp(self.app)
-
-    def teardown(self):
-        ckan.plugins.unload('search_index_hook')
-        del config['ckan.searchindexhook.endpoint']
-        del config['ckan.searchindexhook.endpoint.credentials']
-        del config['ckan.searchindexhook.targetlink.url.base.path']
-        del config['ckan.searchindexhook.index.name']
-        model.repo.rebuild_db()
 
     def test_assert_credentials_configuration_raises_expected_error(self):
         plugin = self.get_plugin_instance()
-        assert_raises(
-            AssertionError,
-            plugin.assert_credentials_configuration,
-            None
-        )
+        with pytest.raises(AssertionError):
+            plugin.assert_credentials_configuration(None)
 
     def test_assert_credentials_configuration_raises_no_error(self):
         plugin = self.get_plugin_instance()
-        self.assertEquals(
+        self.assertEqual(
             None,
             plugin.assert_credentials_configuration('abc:123')
         )
 
     def test_assert_endpoint_configuration_raises_expected_error(self):
         plugin = self.get_plugin_instance()
-        assert_raises(
-            AssertionError,
-            plugin.assert_endpoint_configuration,
-            None
-        )
+        with pytest.raises(AssertionError):
+            plugin.assert_endpoint_configuration(None)
 
     def test_assert_endpoint_configuration_raises_no_error(self):
         plugin = self.get_plugin_instance()
-        self.assertEquals(
+        self.assertEqual(
             None,
             plugin.assert_endpoint_configuration('abc')
         )
 
     def test_assert_credentials_configuration_raises_expected_error(self):
         plugin = self.get_plugin_instance()
-        assert_raises(
-            AssertionError,
-            plugin.assert_credentials_configuration,
-            None
-        )
+        with pytest.raises(AssertionError):
+            plugin.assert_credentials_configuration(None)
 
     def test_assert_configuration_raises_expected_error_for_missing_endpoint(self):
         plugin = self.get_plugin_instance()
         plugin.search_index_endpoint = None
-        assert_raises(
-            AssertionError,
-            plugin.assert_configuration
-        )
+        with pytest.raises(AssertionError):
+            plugin.assert_configuration()
 
     def test_assert_configuration_raises_expected_error_for_missing_credentials(self):
         plugin = self.get_plugin_instance()
         plugin.search_index_credentials = None
         plugin.search_index_endpoint = 'http://test.endpoint'
-        assert_raises(
-            AssertionError,
-            plugin.assert_configuration
-        )
+        with pytest.raises(AssertionError):
+            plugin.assert_configuration()
 
     def test_assert_configuration_raises_expected_error_for_no_colon_credentials(self):
         plugin = self.get_plugin_instance()
         plugin.search_index_credentials = 'testuser-testpassword'
-        assert_raises(
-            AssertionError,
-            plugin.assert_configuration
-        )
+        with pytest.raises(AssertionError):
+            plugin.assert_configuration()
 
     def test_assert_mandatory_dict_keys_raises_no_error(self):
         plugin = self.get_plugin_instance()
@@ -115,7 +85,7 @@ class TestPlugin(unittest.TestCase, object):
             'data_dict': json.dumps(resources_dict)
         }
 
-        self.assertEquals(
+        self.assertEqual(
             None,
             plugin.assert_mandatory_dict_keys(data_dict)
         )
@@ -127,11 +97,8 @@ class TestPlugin(unittest.TestCase, object):
             'key': 'value'
         }
 
-        assert_raises(
-            AssertionError,
-            plugin.assert_mandatory_dict_keys,
-            data_dict
-        )
+        with pytest.raises(AssertionError):
+            plugin.assert_mandatory_dict_keys(data_dict)
 
     def test_assert_mandatory_dict_keys_raises_error_for_missing_resources_key(self):
         plugin = self.get_plugin_instance()
@@ -147,11 +114,8 @@ class TestPlugin(unittest.TestCase, object):
             'data_dict': json.dumps(things_dict)
         }
 
-        assert_raises(
-            AssertionError,
-            plugin.assert_mandatory_dict_keys,
-            data_dict
-        )
+        with pytest.raises(AssertionError):
+            plugin.assert_mandatory_dict_keys(data_dict)
 
     def test_assert_mandatory_dict_keys_raises_error_for_missing_extras_key(self):
         plugin = self.get_plugin_instance()
@@ -172,11 +136,8 @@ class TestPlugin(unittest.TestCase, object):
             'data_dict': json.dumps(resources_dict)
         }
 
-        assert_raises(
-            AssertionError,
-            plugin.assert_mandatory_dict_keys,
-            data_dict
-        )
+        with pytest.raises(AssertionError):
+            plugin.assert_mandatory_dict_keys(data_dict)
 
     def test_should_be_indexed_works_for_indexable_dataset_type(self):
         plugin = self.get_plugin_instance()
@@ -196,7 +157,7 @@ class TestPlugin(unittest.TestCase, object):
         plugin = self.get_plugin_instance()
         plugin.indexable_data_types = 'one,two, three,                         four'
 
-        self.assertEquals(
+        self.assertEqual(
             type(plugin.get_indexable_data_types()).__name__,
             'list'
         )
@@ -219,10 +180,8 @@ class TestPlugin(unittest.TestCase, object):
         plugin.search_index_endpoint = 'http://test.endpoint'
         plugin.targetlink_url_base_path = None
 
-        assert_raises(
-            AssertionError,
-            plugin.assert_configuration
-        )
+        with pytest.raises(AssertionError):
+            plugin.assert_configuration()
 
     def test_assert_configuration_raises_expected_error_for_missing_index_name(self):
         plugin = self.get_plugin_instance()
@@ -230,15 +189,13 @@ class TestPlugin(unittest.TestCase, object):
         plugin.search_index_endpoint = 'http://test.endpoint'
         plugin.targetlink_url_base_path = '/foo/bar/'
         plugin.search_index_name = None
-        assert_raises(
-            AssertionError,
-            plugin.assert_configuration
-        )
+        with pytest.raises(AssertionError):
+            plugin.assert_configuration()
 
     def test_get_targetlink_url_base_path_completes_path(self):
         plugin = self.get_plugin_instance()
         plugin.targetlink_url_base_path = 'foooo/bar'
-        self.assertEquals(
+        self.assertEqual(
             plugin.targetlink_url_base_path + '/',
             plugin.get_targetlink_url_base_path()
         )
@@ -246,7 +203,7 @@ class TestPlugin(unittest.TestCase, object):
     def test_get_targetlink_url_base_path_returns_path_as_is_when_closing_slash_is_set(self):
         plugin = self.get_plugin_instance()
         plugin.targetlink_url_base_path = 'test/path/'
-        self.assertEquals(
+        self.assertEqual(
             plugin.targetlink_url_base_path,
             plugin.get_targetlink_url_base_path()
         )
@@ -254,7 +211,7 @@ class TestPlugin(unittest.TestCase, object):
     def test_get_endpoint_completes_path(self):
         plugin = self.get_plugin_instance()
         plugin.search_index_endpoint = 'http://www.ws.de/test'
-        self.assertEquals(
+        self.assertEqual(
             plugin.search_index_endpoint + '/',
             plugin.get_search_index_endpoint()
         )
@@ -262,7 +219,7 @@ class TestPlugin(unittest.TestCase, object):
     def test_get_endpoint_returns_path_as_is_when_closing_slash_is_set(self):
         plugin = self.get_plugin_instance()
         plugin.search_index_endpoint = 'http://www.ws.de/test/'
-        self.assertEquals(
+        self.assertEqual(
             plugin.search_index_endpoint,
             plugin.get_search_index_endpoint()
         )
@@ -272,7 +229,7 @@ class TestPlugin(unittest.TestCase, object):
         plugin.targetlink_url_base_path = '/test/path/'
         dataset_name = 'example-dataset'
         substituted_targetlink = plugin.substitute_targetlink(dataset_name)
-        self.assertEquals(
+        self.assertEqual(
             plugin.targetlink_url_base_path + dataset_name,
             substituted_targetlink
         )
@@ -439,9 +396,9 @@ class TestPlugin(unittest.TestCase, object):
         json_raw = kwargs['data']
         actual_payload = json.loads(json_raw)
         # Payload is a list of dicts, and we use only one document
-        self.assertEquals(1, len(expected_payload),
+        self.assertEqual(1, len(expected_payload),
                           'Invalid expected_payload: Only one dict is supported')
-        self.assertEquals(1, len(actual_payload))
+        self.assertEqual(1, len(actual_payload))
         # dump and load again expected data to get unicode strings everywhere
         expected_utf = json.loads(json.dumps(expected_payload))
         # extract the dataset and unserialize all strings to allow a dict comparison
@@ -449,7 +406,7 @@ class TestPlugin(unittest.TestCase, object):
         actual_data = actual_payload[0]
 
         if expected_data['document']['metadata'] != None:
-            self.assertNotEquals(actual_data['document']['metadata'], None)
+            self.assertNotEqual(actual_data['document']['metadata'], None)
             expected_meta = json.loads(expected_data['document']['metadata'])
             actual_meta = json.loads(actual_data['document']['metadata'])
             # although this is implicitly checked again below, check it here already as no further
@@ -784,7 +741,7 @@ class TestPlugin(unittest.TestCase, object):
 
         non_blocked_return = plugin.before_index(pkg_dict)
 
-        self.assertEquals(
+        self.assertEqual(
             pkg_dict,
             non_blocked_return
         )
@@ -803,7 +760,7 @@ class TestPlugin(unittest.TestCase, object):
 
         non_blocked_return = plugin.after_delete([], pkg_dict)
 
-        self.assertEquals(
+        self.assertEqual(
             None,
             non_blocked_return
         )
@@ -823,7 +780,7 @@ class TestPlugin(unittest.TestCase, object):
 
         non_blocked_return = plugin.before_index(pkg_dict)
 
-        self.assertEquals(
+        self.assertEqual(
             pkg_dict,
             non_blocked_return
         )
@@ -851,7 +808,7 @@ class TestPlugin(unittest.TestCase, object):
 
         # assert
         for num, resource_dict in enumerate(resources_dict):
-            self.assertEquals(expected_values[num], resource_dict.get('format', None))
+            self.assertEqual(expected_values[num], resource_dict.get('format', None))
 
     def test_connection_error_does_not_block_after_delete(self):
         plugin = self.get_plugin_instance()
@@ -865,7 +822,7 @@ class TestPlugin(unittest.TestCase, object):
 
         non_blocked_return = plugin.after_delete([], pkg_dict)
 
-        self.assertEquals(
+        self.assertEqual(
             None,
             non_blocked_return
         )
@@ -1042,7 +999,7 @@ class TestPlugin(unittest.TestCase, object):
             }
         ]
 
-        self.assertEquals(
+        self.assertEqual(
             (True, True),
             plugin.aggregate_quality_metrics(resources_dict_list)
         )
@@ -1057,7 +1014,7 @@ class TestPlugin(unittest.TestCase, object):
             }
         ]
 
-        self.assertEquals(
+        self.assertEqual(
             (False, False),
             plugin.aggregate_quality_metrics(resources_dict_list)
         )
@@ -1073,7 +1030,7 @@ class TestPlugin(unittest.TestCase, object):
             }
         ]
 
-        self.assertEquals(
+        self.assertEqual(
             (False, True),
             plugin.aggregate_quality_metrics(resources_dict_list)
         )
@@ -1089,7 +1046,7 @@ class TestPlugin(unittest.TestCase, object):
             }
         ]
 
-        self.assertEquals(
+        self.assertEqual(
             (False, True),
             plugin.aggregate_quality_metrics(resources_dict_list)
         )
@@ -1105,7 +1062,7 @@ class TestPlugin(unittest.TestCase, object):
             }
         ]
 
-        self.assertEquals(
+        self.assertEqual(
             (True, False),
             plugin.aggregate_quality_metrics(resources_dict_list)
         )
@@ -1121,7 +1078,7 @@ class TestPlugin(unittest.TestCase, object):
             }
         ]
 
-        self.assertEquals(
+        self.assertEqual(
             (True, False),
             plugin.aggregate_quality_metrics(resources_dict_list)
         )
@@ -1138,7 +1095,7 @@ class TestPlugin(unittest.TestCase, object):
             }
         ]
 
-        self.assertEquals(
+        self.assertEqual(
             (True, False),
             plugin.aggregate_quality_metrics(resources_dict_list)
         )
@@ -1155,7 +1112,7 @@ class TestPlugin(unittest.TestCase, object):
             }
         ]
 
-        self.assertEquals(
+        self.assertEqual(
             (False, False),
             plugin.aggregate_quality_metrics(resources_dict_list)
         )
@@ -1176,7 +1133,7 @@ class TestPlugin(unittest.TestCase, object):
             }
         ]
 
-        self.assertEquals(
+        self.assertEqual(
             (True, True),
             plugin.aggregate_quality_metrics(resources_dict_list)
         )
@@ -1188,6 +1145,6 @@ class TestPlugin(unittest.TestCase, object):
         if not ckan.plugins.plugin_loaded(plugin_name):
             ckan.plugins.load(plugin_name)
         plugin = ckan.plugins.get_plugin(plugin_name)
-        self.assertNotEquals(None, plugin)
+        self.assertNotEqual(None, plugin)
 
         return plugin

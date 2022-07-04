@@ -1,6 +1,10 @@
 # Changelog
 
-## unreleased yyyy-mm-dd
+## v5.1.0 2022-04-07
+
+* Support for Python 3
+
+## v5.0.0 2022-03-24
 
 * Update to Elasticsearch 7.x: Changes index-queue-service request body
 * Fixes dev-requirements.txt: Broken version 1.7.0 of lazy-object-proxy was banned

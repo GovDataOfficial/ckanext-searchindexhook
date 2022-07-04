@@ -62,9 +62,9 @@ Add the following line to the /path/to/ckan/test-core.ini::
 To run the tests, do::
 
     cd ckanext-searchindexhook
-    nosetests --nologcapture --with-pylons=test.ini ckanext/searchindexhook/tests/*.py
+    pytest --ckan-ini=test.ini ckanext/searchindexhook/tests/*.py
 
 To run the tests and produce a coverage report, first make sure you have
 coverage installed in your virtualenv (``pip install coverage``) then run::
 
-    nosetests --nologcapture --with-pylons=test.ini --with-coverage --cover-package=ckanext.searchindexhook --cover-inclusive --cover-erase --cover-tests ckanext/searchindexhook/tests/*.py
+    pytest --ckan-ini=test.ini --cov=ckanext.searchindexhook ckanext/searchindexhook/tests/*.py
