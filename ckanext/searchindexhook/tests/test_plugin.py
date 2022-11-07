@@ -800,7 +800,7 @@ class TestPlugin(unittest.TestCase, object):
             {"format": "https://www.iana.org/assignments/media-types/text/csv"}
         ]
         expected_values = [
-            None, "", "CSV", "CSV", "CSV", "CSV", "CSV", "text/csv", "text/csv"
+            None, None, "CSV", "CSV", "CSV", "CSV", "CSV", "text/csv", "text/csv"
         ]
 
         # execute

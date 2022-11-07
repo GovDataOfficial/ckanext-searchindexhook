@@ -99,6 +99,8 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
                     if res_format.startswith(prefix):
                         res_format = res_format.replace(prefix, '')
                 res['format'] = res_format
+            else: 
+                res.pop('format', None)
 
     @classmethod
     def assert_endpoint_configuration(cls, value):
