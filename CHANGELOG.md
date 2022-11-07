@@ -1,5 +1,10 @@
 # Changelog
 
+## v5.6.0 2022-11-03
+
+* Adds support for dcat:bbox and dcat:centroid
+* Updates pylint configuration to latest version and fixes several warnings
+
 ## v5.5.0 2022-10-20
 
 * Do not save 'format' in the Elasticsearch searchindex if value it's an empty string

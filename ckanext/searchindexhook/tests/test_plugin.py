@@ -508,6 +508,15 @@ class TestPlugin(unittest.TestCase, object):
             }, {
                 "key": "politicalGeocodingURI",
                 "value": "[\"http://dcat-ap.de/def/politicalGeocoding/stateKey/02\"]"
+            }, {
+                "key": "spatial",
+                "value": "{\"type\":\"Polygon\",\"coordinates\":[[[9.11590576171875,47.62097541515849],[9.2340087890625,47.62097541515849],[9.2340087890625,47.70421683390384],[9.11590576171875,47.70421683390384],[9.11590576171875,47.62097541515849]]]}"
+            }, {
+                "key": "spatial_bbox",
+                "value": "{\"type\":\"Polygon\",\"coordinates\":[[[2.1870606,42.0786393],[2.1870606,42.1655218],[2.3752339,42.1655218],[2.3752339,42.0786393],[2.1870606,42.0786393]]]}"
+            }, {
+                "key": "spatial_centroid",
+                "value": "{\"type\":\"Point\",\"coordinates\":[2.28114725,42.12208055]}"
             }]
         }
 
@@ -533,6 +542,21 @@ class TestPlugin(unittest.TestCase, object):
         metadata_dict['politicalGeocodingURI'] = ["http://dcat-ap.de/def/politicalGeocoding/stateKey/02"]
         # contributor should be a list
         metadata_dict['contributorID'] = ["http://dcat-ap.de/def/contributors/transparenzportalHamburg"]
+        metadata_dict['boundingbox'] = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [2.1870606, 42.0786393],
+                    [2.1870606, 42.1655218],
+                    [2.3752339, 42.1655218],
+                    [2.3752339, 42.0786393],
+                    [2.1870606, 42.0786393]
+                ]
+            ]
+        }
+
+        metadata_dict['spatial_center'] =  {"lat": 42.12208055, "lon": 2.28114725}
+        metadata_dict['spatial_area'] = 82049776.65255576
 
         expected_payload = self._build_expected_payload(pkg_dict, metadata_dict, plugin)
 
@@ -641,6 +665,56 @@ class TestPlugin(unittest.TestCase, object):
 
         # assert
         metadata_dict = self._build_metadata_dict(pkg_dict, data_dict)
+
+        expected_payload = self._build_expected_payload(pkg_dict, metadata_dict, plugin)
+
+        mock_post.assert_called_once_with(
+            plugin.get_search_index_endpoint(),
+            auth=('testuser', 'testpassword'),
+            headers={'Content-Type': 'application/json'},
+            data=ANY
+        )
+        self._check_payload(expected_payload, mock_post)
+
+    @patch('ckanext.searchindexhook.plugin.requests.post')
+    def test_add_to_index_bbox_centroid_no_spatial(self, mock_post):
+        # prepare
+        plugin = self._build_plugin_add_index()
+
+        data_dict = {
+            "resources": [{
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4"
+            }],
+            "extras": [{
+                "key": "spatial_bbox",
+                "value": "{\"type\":\"Polygon\",\"coordinates\":[[[2.1870606,42.0786393],[2.1870606,42.1655218],[2.3752339,42.1655218],[2.3752339,42.0786393],[2.1870606,42.0786393]]]}"
+            }, {
+                "key": "spatial_centroid",
+                "value": "{\"type\":\"Point\",\"coordinates\":[2.28114725,42.12208055]}"
+            }]
+        }
+
+        # execute
+        pkg_dict = self._build_pkg_dict(data_dict)
+        plugin.add_to_index(pkg_dict)
+
+        metadata_dict = self._build_metadata_dict(pkg_dict, data_dict)
+        metadata_dict['boundingbox'] = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [2.1870606, 42.0786393],
+                    [2.1870606, 42.1655218],
+                    [2.3752339, 42.1655218],
+                    [2.3752339, 42.0786393],
+                    [2.1870606, 42.0786393]
+                ]
+            ]
+        }
+
+        metadata_dict['spatial_center'] =  {"lat": 42.12208055, "lon": 2.28114725}
+        metadata_dict['spatial_area'] = 150269613.2332034
 
         expected_payload = self._build_expected_payload(pkg_dict, metadata_dict, plugin)
 

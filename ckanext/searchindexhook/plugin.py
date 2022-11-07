@@ -267,7 +267,12 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
         """
         Calculates the area of the spatial feature
         """
-        return area(spatial)
+        spatial_area = area(spatial)
+        # area must at least be >0. We are using 1/X to rank the results
+        if spatial_area < 0:
+            spatial_area = 1
+
+        return spatial_area
 
     def calculate_geojson_center(self, spatial):
         """
@@ -276,6 +281,14 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
         shapely_polygon = shape(spatial)
         centroid = shapely_polygon.centroid
         return centroid.x, centroid.y
+
+    def calculate_geojson_boundingbox(self, spatial):
+        """
+        Calculates the bounding box of the given Polygon and returns the coordinates
+        """
+        return json.loads(
+            geojson.dumps(shape(spatial).simplify(0))
+            )
 
     def add_to_index(self, data_dict):
         """
@@ -325,6 +338,12 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
                 # if there are geo data, extract them
                 if key == 'spatial' and extra['value'] != '':
                     self.spatial_to_meta(extra, metadata_dict)
+                # if spatial_bbox is provided, extract it
+                elif key == 'spatial_bbox' and extra['value'] != '':
+                    self.spatial_bbox_to_meta(metadata_dict, extra)
+                 # if spatial_centroid is provided, extract it
+                elif key == 'spatial_centroid' and extra['value'] != '':
+                    self.spatial_centroid_to_meta(metadata_dict, extra)
                 # prepare time coverage for easier search
                 elif key == 'temporal_start' and extra['value'] != '':
                     metadata_dict['temporal_start'] = self.normalize_date(extra['value'])
@@ -496,29 +515,27 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
                                 raise ValueError('More than one shared coordinate!')
 
                 # extract string to JSON and remove potential duplicate coordinates using shapely
-                # cf. https://stackoverflow.com/questions/49330030/remove-a-duplicate-point-from-polygon-in-shapely?rq=1
+                # https://stackoverflow.com/questions/49330030/remove-a-duplicate-point-from-polygon-in-shapely?rq=1
                 # dump and load to get unicode strings in dicts.
-                metadata_dict['boundingbox'] = json.loads(
-                    geojson.dumps(shape(spatial_obj).simplify(0))
-                )
+                if 'boundingbox' not in metadata_dict:
+                    metadata_dict['boundingbox'] = json.loads(
+                        geojson.dumps(shape(spatial_obj).simplify(0))
+                    )
 
                 # calculate area covered by the the shape
                 spatial_area = self.calculate_geojson_area(spatial_obj)
 
-                # area must at least be >0. We are using 1/X to rank the results
-                if spatial_area < 0:
-                    spatial_area = 1
-
                 metadata_dict['spatial_area'] = spatial_area
 
                 # calculate center of the shape
-                spatial_center_x, spatial_center_y = self.calculate_geojson_center(
-                    spatial_obj
-                )
-                metadata_dict['spatial_center'] = {
-                    "lat": spatial_center_y,
-                    "lon": spatial_center_x
-                }
+                if 'spatial_center' not in metadata_dict:
+                    spatial_center_x, spatial_center_y = self.calculate_geojson_center(
+                        spatial_obj
+                    )
+                    metadata_dict['spatial_center'] = {
+                        "lat": spatial_center_y,
+                        "lon": spatial_center_x
+                    }
             else:
                 raise ValueError(spatial_obj.errors())
         except Exception as ex:
@@ -530,6 +547,32 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
             info_message += ", "
             info_message += six.text_type(ex.args)
             LOGGER.info(info_message)
+
+    def spatial_bbox_to_meta(self, metadata_dict, extra):
+        """
+        Helper to get GeoJSON from extras->spatial_bbox into a metadata_dict for the given
+        extra item
+        """
+        spatial_bbox = geojson.loads(extra['value'])
+        if spatial_bbox.is_valid and isinstance(spatial_bbox, geojson.Polygon):
+            metadata_dict['boundingbox'] = self.calculate_geojson_boundingbox(spatial_bbox)
+            if 'spatial_area' not in metadata_dict:
+                metadata_dict['spatial_area'] = self.calculate_geojson_area(spatial_bbox)
+        else:
+            LOGGER.debug("The value for 'bbox' is no valid GeoJSON or is not from type Polygon.")
+
+    def spatial_centroid_to_meta(self, metadata_dict, extra):
+        """
+        Helper to get GeoJSON from extras->spatial_centroid into a metadata_dict for the given
+        extra item
+        """
+        spatial_centroid = geojson.loads(extra['value'])
+        if spatial_centroid.is_valid and isinstance(spatial_centroid, geojson.Point):
+            metadata_dict['spatial_center'] = {
+                "lat":spatial_centroid.coordinates[1],
+                "lon":spatial_centroid.coordinates[0]}
+        else:
+            LOGGER.debug("The value for 'centroid' is no valid GeoJSON or is not from type Point.")
 
     def normalize_date(self, datestr):
         """
