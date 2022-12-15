@@ -1,5 +1,9 @@
 # Changelog
 
+## v5.8.0 2022-12-15
+
+* Adds a DataService flag to the search index
+
 ## v5.6.0 2022-11-03
 
 * Adds support for dcat:bbox and dcat:centroid

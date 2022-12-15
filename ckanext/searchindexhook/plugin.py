@@ -306,6 +306,7 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
         credentials = self.get_search_index_credentials()
         has_open, has_closed = self.aggregate_openness(resources_dict)
         has_access_url, has_formats = self.aggregate_quality_metrics(resources_dict)
+        has_data_service = self.aggregate_access_service(resources_dict)
 
         metadata_dict = {
             'state': data_dict['state'],
@@ -327,6 +328,7 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
             'owner_org': data_dict['owner_org'],
             'has_access_url': has_access_url,
             'has_formats': has_formats,
+            'has_data_service': has_data_service,
             'resources': resources_dict,
             'extras': extras_dict
         }
@@ -479,6 +481,28 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
                 has_closed = has_closed or not openness
 
         return has_open, has_closed
+
+    def aggregate_access_service(self, resources_dict):
+        """
+        Returns a booleans with information whether the dataset contains a DataSerive or not
+        """
+        has_data_service = False
+
+        for resource in resources_dict:
+            if "access_services" in resource:
+                try:
+                    access_service_list = json.loads(resource.get('access_services', '[]'))
+                    if isinstance(access_service_list, list) and len(access_service_list) > 0:
+                        has_data_service = True
+                        break
+                except ValueError:
+                    info_message = "invalid data in resources->access_services "
+                    info_message += " at resource: " + resource['package_id']
+                    info_message += ", value: " + resource.get('access_services')
+                    LOGGER.info(info_message)
+
+        return has_data_service
+
 
     def spatial_to_meta(self, extra, metadata_dict):
         """

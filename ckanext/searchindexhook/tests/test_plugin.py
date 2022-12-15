@@ -340,6 +340,7 @@ class TestPlugin(unittest.TestCase, object):
             # license information from resources, in this case: "testResLicense" is an open license.
             "has_open": False,
             "has_closed": False,
+            "has_data_service": False,
             "resources_licenses": [],
 
             # Quality metrics: set to false as default
@@ -1210,6 +1211,87 @@ class TestPlugin(unittest.TestCase, object):
         self.assertEqual(
             (True, True),
             plugin.aggregate_quality_metrics(resources_dict_list)
+        )
+
+    def test_aggregate_access_service(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "access_services":
+                    "[{\"title\":\"Sparql-end Point\",\"endpoint_url\":[\"http://publications.europa.eu/webapi/rdf/sparql\"]}]"
+            },
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "format": "csv"
+            }
+        ]
+
+        self.assertEqual(
+            True,
+            plugin.aggregate_access_service(resources_dict_list)
+        )
+
+    def test_aggregate_access_service_not_in_dict(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4"
+            },
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+            }
+        ]
+
+        self.assertEqual(
+            False,
+            plugin.aggregate_access_service(resources_dict_list)
+        )
+
+    def test_aggregate_access_service_invalid_Json(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "access_services": "Invalid Json"
+            },
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+            }
+        ]
+
+        self.assertEqual(
+            False,
+            plugin.aggregate_access_service(resources_dict_list)
+        )
+
+    def test_aggregate_access_service_invalid_list_instance(self):
+        plugin = self.get_plugin_instance()
+
+        resources_dict_list = [
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+                "access_services": "\"Not a valid list instance\""
+            },
+            {
+                "cache_last_updated": None,
+                "package_id": "f73d8b97-e6cb-46bf-bbf6-670155f9fbb4",
+            }
+        ]
+
+        self.assertEqual(
+            False,
+            plugin.aggregate_access_service(resources_dict_list)
         )
 
     def get_plugin_instance(self, plugin_name='search_index_hook'):
