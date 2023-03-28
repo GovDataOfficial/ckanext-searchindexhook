@@ -8,7 +8,7 @@ search index by hooking into the ``IPackageController`` interface methods ``befo
 Requirements
 ------------
 
-This extension requires at least a CKAN 2.1.* version plus an installation of the search index services for the used Elasticsearch in [GovData](https://github.com/GovDataOfficial/GovDataPortal/).
+This extension requires at least a CKAN 2.1.* version plus an installation of the search index services for the used Elasticsearch in GovData ([on GitHub](https://github.com/GovDataOfficial/GovDataPortal/) or [on Open CoDE](https://gitlab.opencode.de/fitko/govdata/GovDataPortal)).
 
 
 Installation
@@ -18,11 +18,21 @@ To install ckanext-searchindexhook:
 
 1. Activate your CKAN virtual environment, for example::
 
-     . /path/to/virtualenv/bin/activate
+    ```
+    . /path/to/virtualenv/bin/activate
+    ```
 
 2. Install the ckanext-searchindexhook Python package into your virtual environment::
 
-     /path/to/virtualenv/bin/pip install -e git+git://github.com/GovDataOfficial/ckanext-searchindexhook.git#egg=ckanext-searchindexhook
+    ```
+    /path/to/virtualenv/bin/pip install -e git+git://github.com/GovDataOfficial/ckanext-searchindexhook.git#egg=ckanext-searchindexhook
+    ```
+    
+    or
+    
+    ```
+    /path/to/virtualenv/bin/pip install -e git+git://gitlab.opencode.de/fitko/govdata/ckanext-searchindexhook.git#egg=ckanext-searchindexhook
+    ```
 
 3. Modify the CKAN configuration file
 
@@ -31,6 +41,7 @@ To install ckanext-searchindexhook:
 
 - To configure the extension add the following configuration settings
 
+  ```
   ; The endpoint of the search index webservice.<br />
   ckan.searchindexhook.endpoint = http://localhost:9070/index-queue/
 
@@ -46,11 +57,13 @@ To install ckanext-searchindexhook:
 
   ; List of comma separated, indexable package / dataset types<br />
   ckan.searchindexhook.indexable.data.types = datensatz,dataset,dokument,app
+  ```
 
 4. Restart CKAN. For example if you've deployed CKAN with Apache on Ubuntu:
 
-     sudo service apache2 reload
-
+    ```
+    sudo service apache2 reload
+    ```
 
 Running the Tests
 -----------------
