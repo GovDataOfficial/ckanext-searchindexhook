@@ -69,8 +69,8 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
 
             license_openness_map = {}
             for license_dict in license_list:
-                license_openness_map[license_dict["id"]] = license_dict["is_okd_compliant"] or \
-                                                      license_dict["is_osi_compliant"]
+                license_openness_map[license_dict["id"]] = license_dict["od_conformance"] == 'approved' or \
+                                                      license_dict["osd_conformance"] == 'approved'
 
             return license_openness_map
         except Exception as err:
@@ -225,7 +225,37 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
             dataset_name=dataset_name
         )
 
+    # CKAN < 2.10
     def before_index(self, pkg_dict):
+        return self.before_dataset_index(pkg_dict)
+
+    def after_delete(self, context, data_dict):
+        return self.after_dataset_delete(context, data_dict)
+
+    # CKAN >= 2.10
+    def after_dataset_delete(self, context, data_dict):
+        """
+        CKAN hook point for dataset deletion.
+        """
+        LOGGER.debug("Syncing after package deletion")
+
+        try:
+            self.delete_from_index(
+                data_dict['id'],
+                context
+            )
+        except requests.exceptions.HTTPError as error:
+            error_message = 'Request failed with: {message}'.format(
+                message=six.text_type(error)
+            )
+            LOGGER.error(error_message)
+        except requests.exceptions.ConnectionError as error:
+            error_message = 'Endpoint is not available: {message}'.format(
+                message=six.text_type(error)
+            )
+            LOGGER.error(error_message)
+
+    def before_dataset_index(self, pkg_dict):
         """
         CKAN hook point for dataset addition. Before every addition
         a deletion is performed. Only "active" datasets will be index,
@@ -736,25 +766,3 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
         )
         LOGGER.debug(info_message)
         request.raise_for_status()
-
-    def after_delete(self, context, data_dict):
-        """
-        CKAN hook point for dataset deletion.
-        """
-        LOGGER.debug("Syncing after package deletion")
-
-        try:
-            self.delete_from_index(
-                data_dict['id'],
-                context
-            )
-        except requests.exceptions.HTTPError as error:
-            error_message = 'Request failed with: {message}'.format(
-                message=six.text_type(error)
-            )
-            LOGGER.error(error_message)
-        except requests.exceptions.ConnectionError as error:
-            error_message = 'Endpoint is not available: {message}'.format(
-                message=six.text_type(error)
-            )
-            LOGGER.error(error_message)

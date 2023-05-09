@@ -1,8 +1,8 @@
 # ckanext-searchindexhook
 
 This extension adds package data to the search index or deletes package data from the
-search index by hooking into the ``IPackageController`` interface methods ``before_index``
-(for additions) and ``after_delete`` (for deletions).
+search index by hooking into the ``IPackageController`` interface methods ``before_dataset_index``
+(for additions) and ``after_dataset_delete`` (for deletions).
 
 
 Requirements

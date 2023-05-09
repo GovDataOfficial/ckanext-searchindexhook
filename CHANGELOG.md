@@ -1,5 +1,9 @@
 # Changelog
 
+## v5.13.0 2023-05-04
+
+* Adds support for CKAN 2.10.0
+
 ## v5.8.0 2022-12-15
 
 * Adds a DataService flag to the search index
