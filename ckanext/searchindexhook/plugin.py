@@ -10,7 +10,6 @@ import ckan.plugins as p
 from ckan.plugins import toolkit as tk
 import geojson
 import requests
-import six
 from area import area
 from dateutil.parser import parse
 from shapely.geometry import shape
@@ -108,7 +107,7 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
         Asserts that search index endpoint is configured.
         """
         assert_message = 'Configured endpoint is not a value'
-        assert isinstance(value, six.string_types), assert_message
+        assert isinstance(value, str), assert_message
 
     @classmethod
     def assert_credentials_configuration(cls, value):
@@ -116,7 +115,7 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
         Asserts that search index credentials are configured.
         """
         assert_message = 'Configured credentials are not a string'
-        assert isinstance(value, six.string_types), assert_message
+        assert isinstance(value, str), assert_message
         assert_message = ('Credentials not configured',
                           'in format username:password')
         assert len(value.split(':')) == 2, assert_message
@@ -127,7 +126,7 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
         Asserts that the targetlink URL base path is configured.
         """
         assert_message = 'Configured URL base path is not a string'
-        assert isinstance(value, six.string_types), assert_message
+        assert isinstance(value, str), assert_message
 
     @classmethod
     def assert_search_index_name(cls, value):
@@ -135,7 +134,7 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
         Asserts that the search index name is configured.
         """
         assert_message = 'Configured index name is not a string'
-        assert isinstance(value, six.string_types), assert_message
+        assert isinstance(value, str), assert_message
 
     @classmethod
     def assert_mandatory_dict_keys(cls, data_dict):
@@ -246,12 +245,12 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
             )
         except requests.exceptions.HTTPError as error:
             error_message = 'Request failed with: {message}'.format(
-                message=six.text_type(error)
+                message=str(error)
             )
             LOGGER.error(error_message)
         except requests.exceptions.ConnectionError as error:
             error_message = 'Endpoint is not available: {message}'.format(
-                message=six.text_type(error)
+                message=str(error)
             )
             LOGGER.error(error_message)
 
@@ -282,12 +281,12 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
             self.add_to_index(pkg_dict)
         except requests.exceptions.HTTPError as error:
             error_message = 'Request failed with: {message}'.format(
-                message=six.text_type(error)
+                message=str(error)
             )
             LOGGER.error(error_message)
         except requests.exceptions.ConnectionError as error:
             error_message = 'Endpoint is not available: {message}'.format(
-                message=six.text_type(error)
+                message=str(error)
             )
             LOGGER.error(error_message)
 
@@ -599,7 +598,7 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
             info_message += ", Exception: "
             info_message += type(ex).__name__
             info_message += ", "
-            info_message += six.text_type(ex.args)
+            info_message += str(ex.args)
             LOGGER.info(info_message)
 
     def spatial_bbox_to_meta(self, metadata_dict, extra):

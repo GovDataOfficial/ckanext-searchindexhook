@@ -8,7 +8,7 @@ search index by hooking into the ``IPackageController`` interface methods ``befo
 Requirements
 ------------
 
-This extension requires at least a CKAN 2.1.* version plus an installation of the search index services for the used Elasticsearch in GovData ([on GitHub](https://github.com/GovDataOfficial/GovDataPortal/) or [on Open CoDE](https://gitlab.opencode.de/fitko/govdata/GovDataPortal)).
+This extension requires at least a CKAN 2.9.* version plus an installation of the search index services for the used Elasticsearch in GovData ([on GitHub](https://github.com/GovDataOfficial/GovDataPortal/) or [on Open CoDE](https://gitlab.opencode.de/fitko/govdata/GovDataPortal)).
 
 
 Installation

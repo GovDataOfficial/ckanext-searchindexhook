@@ -3,4 +3,3 @@ geojson>=2.0,<2.5.0 # 2.5.0 adds default precision without the possiblity changi
 area
 shapely
 python-dateutil>=2.7,!=2.8.1
-six==1.16.0
