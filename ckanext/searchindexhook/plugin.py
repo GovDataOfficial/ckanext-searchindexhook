@@ -18,6 +18,8 @@ LOGGER = logging.getLogger(__name__)
 
 NORMALIZED_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+geojson.geometry.DEFAULT_PRECISION = 15
+
 
 class SearchIndexHookPlugin(p.SingletonPlugin):
     """
