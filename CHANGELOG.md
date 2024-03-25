@@ -1,5 +1,9 @@
 # Changelog
 
+## v6.7.0 2024-03-26
+
+* Adds support for dcatap:applicableLegislation and dcatap:hvdCategory
+
 ## v6.1.0 2023-08-01
 
 * Updates and cleans up dependencies

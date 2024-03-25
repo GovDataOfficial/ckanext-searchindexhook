@@ -18,6 +18,8 @@ LOGGER = logging.getLogger(__name__)
 
 NORMALIZED_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
+HVD_APPLICABLE_LEGISLATION = "http://data.europa.eu/eli/reg_impl/2023/138/oj"
+
 geojson.geometry.DEFAULT_PRECISION = 15
 
 
@@ -361,6 +363,8 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
             'has_formats': has_formats,
             'has_data_service': has_data_service,
             'resources': resources_dict,
+            'has_hvd': False,
+            'hvd_categories': [],
             'extras': extras_dict
         }
 
@@ -394,6 +398,10 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
                         ).utctimetuple()
                     if dct_modified_date_obj_utc < datetime.datetime.now().utctimetuple():
                         metadata_dict['dct_modified_fallback_ckan'] = metadata_dict['dct_modified']
+                elif key == 'applicable_legislation' and extra['value'] != '':
+                    self.applicable_legislation_to_meta(metadata_dict, extra)
+                elif key == 'hvd_category' and extra['value'] != '':
+                    self.hvd_category_to_meta(metadata_dict, extra)
                 elif extra.get('value'):
                     # some elements simply need to be copied, check if current extra matches one of these
                     # contact, publisher info and geocoding information for metadata quality dashboard
@@ -534,6 +542,23 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
 
         return has_data_service
 
+    def applicable_legislation_to_meta(self, metadata_dict, extra):
+        """
+        Helper to get GeoJSON from extras->applicable_legislation into a metadata_dict for the given
+        extra item
+        """
+        applicable_legislation_list = json.loads(extra.get('value'))
+        if isinstance(applicable_legislation_list, list) and HVD_APPLICABLE_LEGISLATION in applicable_legislation_list:
+            metadata_dict['has_hvd'] = True
+
+    def hvd_category_to_meta(self, metadata_dict, extra):
+        """
+        Helper to get GeoJSON from extras->hvd_category into a metadata_dict for the given
+        extra item
+        """
+        hvd_categories = json.loads(extra.get('value'))
+        if isinstance(hvd_categories, list):
+            metadata_dict['hvd_categories'] = hvd_categories
 
     def spatial_to_meta(self, extra, metadata_dict):
         """

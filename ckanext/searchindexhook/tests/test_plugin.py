@@ -352,6 +352,11 @@ class TestPlugin(unittest.TestCase, object):
             'dct_modified_fallback_ckan': pkg_dict['metadata_modified'],  # default value
             'type': pkg_dict['type'],
             'owner_org': pkg_dict['owner_org'],
+
+            # hvd default values
+            'has_hvd': False,
+            'hvd_categories': [],
+
             'resources': data_dict['resources'],
             'extras': data_dict['extras']
         }
@@ -675,6 +680,7 @@ class TestPlugin(unittest.TestCase, object):
             headers={'Content-Type': 'application/json'},
             data=ANY
         )
+
         self._check_payload(expected_payload, mock_post)
 
     @patch('ckanext.searchindexhook.plugin.requests.post')
@@ -1293,6 +1299,113 @@ class TestPlugin(unittest.TestCase, object):
             False,
             plugin.aggregate_access_service(resources_dict_list)
         )
+
+    def test_applicable_legislation_to_meta(self):
+        extra = {}
+        extra['key'] = "applicable_legislation"
+        extra['value'] = "[\"http://data.europa.eu/eli/reg_impl/2023/138/oj\", \"http://data.europa.eu/eli/reg_impl/2023/138/oj_alt\"]"
+        metadata_dict = {}
+        metadata_dict['name'] = 'test-dict-name'
+        metadata_dict['has_hvd'] = False
+
+        # execute
+        plugin = self.get_plugin_instance()
+        plugin.applicable_legislation_to_meta(metadata_dict, extra)
+
+        # validate
+        self.assertEqual(metadata_dict['has_hvd'], True)
+
+    def test_applicable_legislation_to_meta_no_valid_applicable_legislation(self):
+        extra = {}
+        extra['key'] = "applicable_legislation"
+        extra['value'] = "[\"http://data.europa.eu/eli/reg_impl/not_valid\"]"
+        metadata_dict = {}
+        metadata_dict['name'] = 'test-dict-name'
+        metadata_dict['has_hvd'] = False
+
+        # execute
+        plugin = self.get_plugin_instance()
+        plugin.applicable_legislation_to_meta(metadata_dict, extra)
+
+        # validate
+        self.assertEqual(metadata_dict['has_hvd'], False)
+
+    def test_applicable_legislation_to_meta_invalid_json(self):
+        extra = {}
+        extra['key'] = "applicable_legislation"
+        extra['value'] = "Invalid Json"
+        metadata_dict = {}
+        metadata_dict['name'] = 'test-dict-name'
+        metadata_dict['has_hvd'] = False
+
+        # execute (expects a json parsing error)
+        with pytest.raises(json.JSONDecodeError):
+            plugin = self.get_plugin_instance()
+            plugin.applicable_legislation_to_meta(metadata_dict, extra)
+
+        # validate
+        self.assertEqual(metadata_dict['has_hvd'], False)
+
+    def test_applicable_legislation_to_meta_invalid_list_instance(self):
+        extra = {}
+        extra['key'] = "applicable_legislation"
+        extra['value'] = "\"http://data.europa.eu/eli/reg_impl/2023/138/oj\""
+        metadata_dict = {}
+        metadata_dict['name'] = 'test-dict-name'
+        metadata_dict['has_hvd'] = False
+
+        # execute
+        plugin = self.get_plugin_instance()
+        plugin.applicable_legislation_to_meta(metadata_dict, extra)
+
+        # validate
+        self.assertEqual(metadata_dict['has_hvd'], False)
+
+    def test_hvd_category_to_meta(self):
+        extra = {}
+        extra['key'] = "hvd_category"
+        extra['value'] = "[\"http://data.europa.eu/bna/c_164e0bf5\", \"http://data.europa.eu/bna/c_ac64a52d\"]"
+        metadata_dict = {}
+        metadata_dict['name'] = 'test-dict-name'
+        metadata_dict['hvd_categories'] = []
+
+        # execute
+        plugin = self.get_plugin_instance()
+        plugin.hvd_category_to_meta(metadata_dict, extra)
+
+        # validate
+        self.assertEqual(metadata_dict['hvd_categories'], ["http://data.europa.eu/bna/c_164e0bf5", "http://data.europa.eu/bna/c_ac64a52d"])
+
+    def test_hvd_category_to_meta_invalid_list_instance(self):
+        extra = {}
+        extra['key'] = "hvd_category"
+        extra['value'] = "\"http://data.europa.eu/bna/c_164e0bf5\""
+        metadata_dict = {}
+        metadata_dict['name'] = 'test-dict-name'
+        metadata_dict['hvd_categories'] = []
+
+        # execute
+        plugin = self.get_plugin_instance()
+        plugin.applicable_legislation_to_meta(metadata_dict, extra)
+
+        # validate
+        self.assertEqual(metadata_dict['hvd_categories'], [])
+
+    def test_hvd_category_to_meta_invalid_json(self):
+        extra = {}
+        extra['key'] = "hvd_category"
+        extra['value'] = "Invalid Json"
+        metadata_dict = {}
+        metadata_dict['name'] = 'test-dict-name'
+        metadata_dict['hvd_categories'] = []
+
+        # execute (expects a json parsing error)
+        with pytest.raises(json.JSONDecodeError):
+            plugin = self.get_plugin_instance()
+            plugin.applicable_legislation_to_meta(metadata_dict, extra)
+
+        # validate
+        self.assertEqual(metadata_dict['hvd_categories'], [])
 
     def get_plugin_instance(self, plugin_name='search_index_hook'):
         '''
