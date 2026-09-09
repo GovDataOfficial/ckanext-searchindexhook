@@ -29,6 +29,7 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
     search index.
     """
     p.implements(p.IPackageController, inherit=True)
+    p.implements(p.IActions)
 
     search_index_endpoint = tk.config.get(
         'ckan.searchindexhook.endpoint',
@@ -295,6 +296,51 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
             LOGGER.error(error_message)
 
         return pkg_dict
+
+    # IActions
+    def get_actions(self):
+        """
+        Chain ``dataset_purge`` so the search index is cleaned up when a
+        package row is hard-deleted. CKAN does not fire an ``IPackageController``
+        hook for ``dataset_purge`` — ``after_dataset_delete`` only fires on
+        soft-delete. Without this, purges leave orphan documents in the index.
+        """
+        plugin = self
+
+        @tk.chained_action
+        def dataset_purge(next_action, context, data_dict):
+            # Resolve the UUID before the row disappears; package_show fails
+            # once the row is gone.
+            try:
+                pkg = tk.get_action('package_show')(
+                    {'model': model, 'ignore_auth': True,
+                     'session': model.Session},
+                    {'id': data_dict['id']}
+                )
+                resolved_id = pkg['id']
+                resolved_name = pkg.get('name')
+            except tk.ObjectNotFound:
+                # dataset_purge will raise NotFound as well — let it propagate.
+                return next_action(context, data_dict)
+
+            result = next_action(context, data_dict)
+
+            try:
+                plugin._send_delete_to_search_index(resolved_id, resolved_name)
+            except requests.exceptions.HTTPError as error:
+                LOGGER.error(
+                    'Search index delete after purge failed for %s: %s',
+                    resolved_id, error
+                )
+            except requests.exceptions.ConnectionError as error:
+                LOGGER.error(
+                    'Endpoint unreachable during purge sync for %s: %s',
+                    resolved_id, error
+                )
+
+            return result
+
+        return {'dataset_purge': dataset_purge}
 
     def calculate_geojson_area(self, spatial):
         """
@@ -580,8 +626,11 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
             if spatial_obj.is_valid:
                 # - additional check: does the interior share more
                 #   than 1 point with exterior? --> invalid
-                # - exclude GeoJSON type Point
-                if len(spatial_obj.coordinates) > 1 and isinstance(spatial_obj.coordinates[0], list):
+                # - only applies to simple Polygons; GeometryCollection / MultiPolygon /
+                #   Point don't have that "outer-ring + holes" semantic here.
+                if isinstance(spatial_obj, geojson.Polygon) \
+                        and len(spatial_obj.coordinates) > 1 \
+                        and isinstance(spatial_obj.coordinates[0], list):
                     # check all internal polygons
                     for internal_polygon in spatial_obj.coordinates[1:]:
                         shared_coordinates_counter = 0
@@ -602,12 +651,16 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
                         geojson.dumps(shape(spatial_obj).simplify(0))
                     )
 
-                # calculate area covered by the the shape
-                spatial_area = self.calculate_geojson_area(spatial_obj)
+                # calculate area covered by the shape. `area` package only supports
+                # Polygon / MultiPolygon; for GeometryCollection use shapely's planar
+                # area (sufficient for scoring, not for absolute values).
+                if isinstance(spatial_obj, (geojson.Polygon, geojson.MultiPolygon)):
+                    metadata_dict['spatial_area'] = self.calculate_geojson_area(spatial_obj)
+                else:
+                    # Match calculate_geojson_area semantics: negative -> 1, keep 0
+                    shapely_area = shape(spatial_obj).area
+                    metadata_dict['spatial_area'] = 1 if shapely_area < 0 else shapely_area
 
-                metadata_dict['spatial_area'] = spatial_area
-
-                # calculate center of the shape
                 if 'spatial_center' not in metadata_dict:
                     spatial_center_x, spatial_center_y = self.calculate_geojson_center(
                         spatial_obj
@@ -749,6 +802,22 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
             self.search_index_endpoint
         )
 
+        # resolve package dict, because CKAN gives us sometimes the name instead of the id
+        package_dict = self.resolve_data_dict(document_id, context)
+        self._send_delete_to_search_index(
+            package_dict['id'], package_dict.get('name')
+        )
+
+    def _send_delete_to_search_index(self, package_id, package_name=None):
+        """
+        Send a DELETE request to the search index for an already-resolved
+        package UUID. Callers that no longer have access to the package_dict
+        (e.g. after ``dataset_purge`` removed the row) can use this directly.
+        """
+        self.assert_endpoint_configuration(
+            self.search_index_endpoint
+        )
+
         credentials = self.get_search_index_credentials()
 
         # resolve package dict, because CKAN gives us sometimes the name instead of the id
@@ -761,7 +830,7 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
             'version': None,
             'displayName': None,
             'document': {
-                'id': real_package_id,
+                'id': package_id,
                 'title': None,
                 'sprache': None,
                 'sections': [],
@@ -772,19 +841,19 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
         }]
 
         info_message = 'Endpoint to call against: {endpoint}'.format(
-            endpoint=self.get_search_index_endpoint() + real_package_id
+            endpoint=self.get_search_index_endpoint() + package_id
         )
         LOGGER.debug(info_message)
 
         request = requests.delete(
-            self.get_search_index_endpoint() + real_package_id,
+            self.get_search_index_endpoint() + package_id,
             auth=(credentials['username'], credentials['password']),
             headers={'Content-Type': 'application/json'},
             data=json.dumps(payload)
         )
 
         info_message = "Deleting from index: (id={id}, name={name})".format(
-            id=real_package_id, name=package_dict['name']
+            id=package_id, name=package_name
         )
         LOGGER.debug(info_message)
         info_message = "Service reponse status code: (code={code})".format(

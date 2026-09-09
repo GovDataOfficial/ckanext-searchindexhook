@@ -250,6 +250,82 @@ class TestPlugin(unittest.TestCase, object):
 
         plugin.delete_from_index = pre_mock_def
 
+    def test_get_actions_registers_chained_dataset_purge(self):
+        plugin = self.get_plugin_instance()
+        actions = plugin.get_actions()
+        self.assertIn('dataset_purge', actions)
+        # chained_action decorator marks the function with a `chained_action` attr
+        self.assertTrue(getattr(actions['dataset_purge'], 'chained_action', False))
+
+    def test_dataset_purge_sync_deletes_from_index_after_purge(self):
+        plugin = self.get_plugin_instance()
+        pre_mock_def = plugin._send_delete_to_search_index
+        plugin._send_delete_to_search_index = Mock()
+
+        resolved_pkg = {'id': 'uuid-42', 'name': 'purge-me'}
+        next_action = Mock(return_value=None)
+
+        with patch(
+            'ckanext.searchindexhook.plugin.tk.get_action'
+        ) as mock_get_action:
+            mock_get_action.return_value = Mock(return_value=resolved_pkg)
+
+            purge = plugin.get_actions()['dataset_purge']
+            purge(next_action, {}, {'id': 'purge-me'})
+
+        # next_action was called between resolve and index delete
+        next_action.assert_called_once_with({}, {'id': 'purge-me'})
+        plugin._send_delete_to_search_index.assert_called_once_with(
+            'uuid-42', 'purge-me'
+        )
+
+        plugin._send_delete_to_search_index = pre_mock_def
+
+    def test_dataset_purge_sync_skips_when_package_not_found(self):
+        plugin = self.get_plugin_instance()
+        pre_mock_def = plugin._send_delete_to_search_index
+        plugin._send_delete_to_search_index = Mock()
+
+        next_action = Mock()
+        not_found = Mock(side_effect=tk.ObjectNotFound('gone'))
+
+        with patch(
+            'ckanext.searchindexhook.plugin.tk.get_action',
+            return_value=not_found
+        ):
+            purge = plugin.get_actions()['dataset_purge']
+            purge(next_action, {}, {'id': 'missing'})
+
+        # Purge still delegated to the wrapped action (which will raise NotFound
+        # itself). No search-index side-effect.
+        next_action.assert_called_once_with({}, {'id': 'missing'})
+        self.assertFalse(plugin._send_delete_to_search_index.called)
+
+        plugin._send_delete_to_search_index = pre_mock_def
+
+    def test_dataset_purge_sync_swallows_http_error(self):
+        plugin = self.get_plugin_instance()
+        pre_mock_def = plugin._send_delete_to_search_index
+        plugin._send_delete_to_search_index = Mock(
+            side_effect=HTTPError('ES 500')
+        )
+
+        resolved_pkg = {'id': 'uuid-42', 'name': 'purge-me'}
+        next_action = Mock(return_value=None)
+
+        with patch(
+            'ckanext.searchindexhook.plugin.tk.get_action',
+            return_value=Mock(return_value=resolved_pkg)
+        ):
+            purge = plugin.get_actions()['dataset_purge']
+            # must NOT raise — a failed ES sync should not undo the purge
+            purge(next_action, {}, {'id': 'purge-me'})
+
+        next_action.assert_called_once()
+        plugin._send_delete_to_search_index.assert_called_once()
+
+        plugin._send_delete_to_search_index = pre_mock_def
+
     def test_before_index_deletes_and_adds(self):
         plugin = self.get_plugin_instance()
         plugin.indexable_data_types = 'indexable_dataset'
@@ -1004,6 +1080,35 @@ class TestPlugin(unittest.TestCase, object):
         self.assertEqual(metadata_dict['spatial_center'],
                          {'lat': 47.66259612453116, 'lon': 9.174957275390625})
 
+    def test_spatial_to_meta_geojson_type_geometrycollection(self):
+        # prepare — GeometryCollection with two small triangles (bounds 0..3 / 0..2)
+        extra = {
+            'key': 'spatial',
+            'value': json.dumps({
+                "type": "GeometryCollection",
+                "geometries": [
+                    {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [0, 1], [0, 0]]]},
+                    {"type": "Polygon", "coordinates": [[[2, 1], [3, 1], [2, 2], [2, 1]]]},
+                ],
+            }),
+        }
+        metadata_dict = {'name': 'test-dict-geocol'}
+
+        # execute
+        plugin = self.get_plugin_instance()
+        plugin.spatial_to_meta(extra, metadata_dict)
+
+        # validate — all three fields must be populated (regression: previously
+        # spatial_to_meta silently swallowed AttributeError on .coordinates)
+        self.assertEqual(metadata_dict['boundingbox']['type'], 'GeometryCollection')
+        self.assertEqual(len(metadata_dict['boundingbox']['geometries']), 2)
+        self.assertGreater(metadata_dict['spatial_area'], 0)
+        self.assertIn('lat', metadata_dict['spatial_center'])
+        self.assertIn('lon', metadata_dict['spatial_center'])
+        # centroid roughly in the middle of the two triangles
+        self.assertAlmostEqual(metadata_dict['spatial_center']['lon'], 1.5, delta=0.5)
+        self.assertAlmostEqual(metadata_dict['spatial_center']['lat'], 1.0, delta=0.5)
+
     def test_remove_duplicate_coordinates(self):
         # prepare
         extra = {}
@@ -1412,7 +1517,18 @@ class TestPlugin(unittest.TestCase, object):
         Return a plugin instance by name.
         '''
         if not ckan.plugins.plugin_loaded(plugin_name):
-            ckan.plugins.load(plugin_name)
+            try:
+                ckan.plugins.load(plugin_name)
+            except Exception:
+                # `ckan.plugins.load` runs `environment.update_config`, which
+                # calls `sqlalchemy.engine_from_config` and then
+                # `model.init_model(engine)` - the latter autoloads
+                # `alembic_version` and needs a live Postgres. The unit tests
+                # here mock all HTTP and don't touch DB/Solr, so a CI without
+                # infrastructure is fine. CKAN registers the plugin in its
+                # loaded-set *before* `plugins_update`, so `get_plugin` below
+                # still returns the singleton.
+                pass
         plugin = ckan.plugins.get_plugin(plugin_name)
         self.assertNotEqual(None, plugin)
 

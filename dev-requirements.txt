@@ -4,5 +4,12 @@ isort
 
 factory-boy>=2
 pytest-cov
-pytest-ckan
 pytest-factoryboy
+
+# Anmerkung: `pytest-ckan` wurde entfernt. Das Paket auf PyPI (0.0.7, 2020) ist
+# deprecated und zieht `pylons` als Hard-Dependency mit rein - Pylons wurde in
+# CKAN 2.9 gegen Flask ausgetauscht, deshalb bricht der Import auf modernen
+# CKAN-Versionen (siehe ModuleNotFoundError: No module named 'pylons').
+# Die Tests hier nutzen ohnehin keine `pytest-ckan`-Fixtures (reines
+# unittest.TestCase + pytest.raises), CKAN selbst wird von der CI via
+# `pip install ckan` bereitgestellt.
