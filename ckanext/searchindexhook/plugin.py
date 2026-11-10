@@ -59,6 +59,7 @@ class SearchIndexHookPlugin(p.SingletonPlugin):
     # IPackageController
 
     def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         # Load license information once
         self.license_openness_map = self.load_license_openness()
 

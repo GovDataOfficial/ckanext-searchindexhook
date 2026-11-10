@@ -4,7 +4,7 @@ from os import path
 from setuptools import setup, find_packages  # Always prefer setuptools over distutils
 
 
-VERSION = '6.8.0'
+VERSION = '6.9.0'
 here = path.abspath(path.dirname(__file__))
 
 # Get the long description from the relevant file
